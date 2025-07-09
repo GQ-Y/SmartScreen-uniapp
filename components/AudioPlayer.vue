@@ -310,6 +310,21 @@ export default {
         // 开始时间更新定时器
         this.startTimeUpdate()
 
+        // 如果是自动播放模式，确保播放开始
+        if (this.autoplay) {
+          // 延迟一下确保音频上下文完全初始化
+          setTimeout(() => {
+            if (this.audioContext && !this.isPlaying && !this.hasError) {
+              try {
+                this.audioContext.play()
+                logger.info('🎵 初始化后触发自动播放')
+              } catch (error) {
+                logger.warn('🎵 初始化后自动播放失败:', error)
+              }
+            }
+          }, 500)
+        }
+
         logger.info('🎵 音频上下文初始化成功')
 
       } catch (error) {
@@ -366,6 +381,19 @@ export default {
     handleCanPlay() {
       logger.info('🎵 音频可以播放')
       this.isLoading = false
+      
+      // 如果设置了自动播放且当前没有播放，则手动触发播放
+      if (this.autoplay && !this.isPlaying && this.audioContext) {
+        this.$nextTick(() => {
+          try {
+            this.audioContext.play()
+            logger.info('🎵 触发自动播放')
+          } catch (error) {
+            logger.warn('🎵 自动播放失败:', error)
+          }
+        })
+      }
+      
       this.$emit('canplay')
     },
 
@@ -447,7 +475,6 @@ export default {
     handleAudioStopped() {
       this.isPlaying = false
       this.currentTime = 0
-      logger.info('音频播放已停止')
     },
 
     // 重试播放
@@ -500,41 +527,40 @@ export default {
 
     // 处理停止事件
     handleStopEvent() {
-      logger.info('🎵 收到停止播放事件')
-      this.stop()
-      this.cleanup()
+      if (this.audioContext) {
+        this.stop()
+      }
     },
 
     // 清理资源
     cleanup() {
-      logger.info('🎵 清理音频播放器资源')
-
-      // 停止时间更新
-      this.stopTimeUpdate()
-
-      // 停止并销毁音频上下文
-      if (this.audioContext) {
-        try {
-          // 先停止播放
-          this.audioContext.stop()
-          // 再销毁上下文
-          this.audioContext.destroy()
-        } catch (error) {
-          logger.warn('🎵 清理音频上下文时出错:', error)
-        } finally {
-          this.audioContext = null
-        }
+      // 防止重复清理
+      if (!this.audioContext) {
+        return
       }
 
-      // 重置状态
-      this.isPlaying = false
-      this.isLoading = false
-      this.hasError = false
-      this.currentTime = 0
-      this.duration = 0
-      this.retryCount = 0
+      try {
+        // 停止时间更新
+        this.stopTimeUpdate()
 
-      logger.info('🎵 音频播放器资源清理完成')
+        // 停止并销毁音频上下文
+        if (this.audioContext) {
+          this.audioContext.stop()
+          this.audioContext.destroy()
+          this.audioContext = null
+        }
+
+        // 重置状态
+        this.isPlaying = false
+        this.isLoading = false
+        this.hasError = false
+        this.currentTime = 0
+        this.duration = 0
+        this.retryCount = 0
+
+      } catch (error) {
+        logger.warn('清理音频上下文时出错:', error)
+      }
     },
 
     // 公共方法：播放
@@ -554,7 +580,13 @@ export default {
     // 公共方法：停止
     stop() {
       if (this.audioContext) {
-        this.audioContext.stop()
+        try {
+          this.audioContext.stop()
+          this.isPlaying = false
+          this.currentTime = 0
+        } catch (error) {
+          logger.warn('停止音频播放时出错:', error)
+        }
       }
     },
 

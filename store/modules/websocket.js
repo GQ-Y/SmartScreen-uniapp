@@ -379,8 +379,17 @@ const actions = {
           break
           
         case MESSAGE_TYPES.CONTENT_RESPONSE:
-          // 先停止当前播放的内容，再设置新内容
-          dispatch('stopCurrentContent')
+          // 检查是否有实际的内容变化，避免无谓的停止操作
+          const currentContentData = state.contentData
+          const hasContentChanged = !currentContentData || 
+            !currentContentData.data || 
+            JSON.stringify(currentContentData.data) !== JSON.stringify(message.data)
+          
+          if (hasContentChanged) {
+            // 先停止当前播放的内容，再设置新内容
+            dispatch('stopCurrentContent')
+          }
+          
           // 处理内容响应
           commit('SET_CONTENT_DATA', message)
           break

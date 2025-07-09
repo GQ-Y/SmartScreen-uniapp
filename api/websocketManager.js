@@ -131,13 +131,11 @@ export class WebSocketManager {
     
     // 连接关闭
     this.socket.onClose((res) => {
-      this.logger.warn('WebSocket连接已关闭', res)
       this.handleDisconnection()
     })
     
     // 连接错误
     this.socket.onError((error) => {
-      this.logger.error('WebSocket连接错误', error)
       this.handleConnectionError(error)
     })
   }
@@ -149,7 +147,7 @@ export class WebSocketManager {
     try {
 
       const message = MessageFactory.parseMessage(data)
-      this.logger.info('📥 解析后的WebSocket消息:', JSON.stringify(message, null, 2))
+      this.logger.info('解析后的WebSocket消息:', JSON.stringify(message, null, 2))
       this.triggerEvent('onMessage', message)
       
       // 处理特定消息类型
@@ -195,7 +193,6 @@ export class WebSocketManager {
 
     try {
       const data = JSON.stringify(message)
-      this.logger.info('发送WebSocket消息:', JSON.stringify(message, null, 2))
 
       this.socket.send({
         data,
@@ -230,7 +227,6 @@ export class WebSocketManager {
       this.deviceInfo.deviceName
     )
     
-    this.logger.info('发送设备注册消息', message)
     this.sendMessage(message)
   }
   
@@ -238,7 +234,6 @@ export class WebSocketManager {
    * 处理注册响应
    */
   handleRegisterAck(message) {
-    this.logger.info('收到注册响应:', JSON.stringify(message, null, 2))
 
     if (message.success) {
       this.isRegistered = true
@@ -278,12 +273,10 @@ export class WebSocketManager {
    * 处理心跳响应
    */
   handleHeartbeatAck(message) {
-    this.logger.info('收到心跳响应:', JSON.stringify(message, null, 2))
 
     if (message.success) {
       this.isActive = message.active
     } else {
-      this.logger.warn('心跳响应失败:', message.msg)
     }
   }
   
@@ -291,11 +284,9 @@ export class WebSocketManager {
    * 处理激活状态变更
    */
   handleActiveStatus(message) {
-    this.logger.info('设备激活状态变更:', JSON.stringify(message, null, 2))
     this.isActive = message.active
 
     if (this.isActive) {
-      this.logger.info('设备已激活，自动获取内容')
       this.getContent()
     } else {
       this.logger.warn('设备已禁用')
@@ -307,12 +298,10 @@ export class WebSocketManager {
    */
   getContent() {
     if (!this.deviceInfo || !this.isRegistered) {
-      this.logger.warn('设备未注册，无法获取内容')
       return
     }
     
     const message = new GetContentMessage(this.deviceInfo.mac)
-    this.logger.info('请求获取内容')
     this.sendMessage(message)
   }
   
@@ -326,7 +315,6 @@ export class WebSocketManager {
       this.sendHeartbeat()
     }, WEBSOCKET_CONFIG.HEARTBEAT_INTERVAL)
     
-    this.logger.debug('心跳定时器已启动')
   }
   
   /**
@@ -336,7 +324,6 @@ export class WebSocketManager {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
-      this.logger.debug('心跳定时器已停止')
     }
   }
 

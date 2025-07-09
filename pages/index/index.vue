@@ -367,17 +367,17 @@ export default {
 
       const data = contentData.data
 
-      // 直接返回direct_content，最简单
-      if (data.direct_content && data.direct_content.content_url) {
-        return data.direct_content
-      }
-
-      // 如果没有direct_content，尝试primary_contents
+      // 优先使用primary_contents[0]，因为这是自动切换时更新的内容
       if (data.primary_contents && data.primary_contents.length > 0) {
         const content = data.primary_contents[0]
         if (content.content_url) {
           return content
         }
+      }
+
+      // 如果没有primary_contents，才使用direct_content
+      if (data.direct_content && data.direct_content.content_url) {
+        return data.direct_content
       }
 
       return null
@@ -583,15 +583,15 @@ export default {
         await this.connect()
         logger.info('WebSocket自动连接成功')
 
-        // 连接成功后立即获取内容
-        setTimeout(async () => {
-          try {
-            await this.getContent()
-            logger.info('自动获取内容成功')
-          } catch (error) {
-            logger.warn('自动获取内容失败:', error)
-          }
-        }, 1000)
+        // 注释掉重复的getContent调用，WebSocketManager会在注册成功后自动获取内容
+        // setTimeout(async () => {
+        //   try {
+        //     await this.getContent()
+        //     logger.info('自动获取内容成功')
+        //   } catch (error) {
+        //     logger.warn('自动获取内容失败:', error)
+        //   }
+        // }, 1000)
 
       } catch (error) {
         logger.warn('WebSocket自动连接失败:', error)
@@ -655,23 +655,34 @@ export default {
       // 先清除之前的计时器
       this.clearDurationTimer()
       
-      // 只在真正有内容变化时打印日志
-      if (newContent !== oldContent) {
+      // 检查内容是否真正发生变化（基于ID和URL而不是对象引用）
+      const oldId = oldContent?.id
+      const newId = newContent?.id
+      const oldUrl = oldContent?.content_url
+      const newUrl = newContent?.content_url
+      
+      const hasContentChanged = oldId !== newId || oldUrl !== newUrl
+      
+      // 只在真正有内容变化时打印日志和处理
+      if (hasContentChanged) {
         logger.info('内容切换:', {
-          from: oldContent?.title || '无',
-          to: newContent?.title || '无',
+          fromId: oldId,
+          fromTitle: oldContent?.title || '无',
+          toId: newId,
+          toTitle: newContent?.title || '无',
+          toType: newContent ? this.getContentTypeName(newContent.content_type) : '无',
           duration: newContent?.duration || 0
         })
-      }
 
-      // 如果有旧内容，先停止它
-      if (oldContent) {
-        this.stopCurrentContent(oldContent)
-      }
+        // 如果有旧内容，先停止它
+        if (oldContent) {
+          this.stopCurrentContent(oldContent)
+        }
 
-      // 如果有新内容，开始播放
-      if (newContent) {
-        this.startNewContent(newContent)
+        // 如果有新内容，开始播放
+        if (newContent) {
+          this.startNewContent(newContent)
+        }
       }
     },
 

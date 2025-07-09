@@ -1,0 +1,24 @@
+{
+	"pages": [{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "SmartScreen",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/settings/settings",
+			"style": {
+				"navigationBarTitleText": "设置",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "SmartScreen",
+		"navigationBarBackgroundColor": "#1e3c72",
+		"backgroundColor": "#1e3c72"
+	},
+	"uniIdRouter": {}
+}

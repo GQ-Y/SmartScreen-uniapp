@@ -69,7 +69,11 @@ const state = {
 
 const getters = {
   // 获取WebSocket配置
-  getWebSocketConfig: state => ({ ...state.websocketConfig }),
+  getWebSocketConfig: state => {
+    const config = { ...state.websocketConfig }
+    logger.debug('获取WebSocket配置:', config)
+    return config
+  },
   
   // 获取设备配置
   getDeviceConfig: state => ({ ...state.deviceConfig }),
@@ -220,25 +224,30 @@ const mutations = {
 
 const actions = {
   // 加载设置
-  async loadSettings({ commit }) {
+  async loadSettings({ commit, state }) {
     try {
       logger.info('加载应用设置')
-      
-      // 加载WebSocket配置
+
+      // 加载WebSocket配置，如果没有则使用默认值
       const wsConfig = uni.getStorageSync(STORAGE_KEYS.WEBSOCKET_CONFIG)
-      if (wsConfig) {
+      if (wsConfig && Object.keys(wsConfig).length > 0) {
         commit('SET_WEBSOCKET_CONFIG', wsConfig)
+      } else {
+        // 确保有默认的WebSocket配置
+        logger.info('使用默认WebSocket配置')
       }
-      
+
       // 加载设备配置
       const deviceConfig = uni.getStorageSync(STORAGE_KEYS.DEVICE_CONFIG)
-      if (deviceConfig) {
+      if (deviceConfig && Object.keys(deviceConfig).length > 0) {
         commit('SET_DEVICE_CONFIG', deviceConfig)
+      } else {
+        logger.info('使用默认设备配置')
       }
-      
+
       // 加载用户设置
       const userSettings = uni.getStorageSync(STORAGE_KEYS.USER_SETTINGS)
-      if (userSettings) {
+      if (userSettings && Object.keys(userSettings).length > 0) {
         if (userSettings.player) {
           commit('SET_PLAYER_CONFIG', userSettings.player)
         }
@@ -248,20 +257,31 @@ const actions = {
         if (userSettings.log) {
           commit('SET_LOG_CONFIG', userSettings.log)
         }
+      } else {
+        logger.info('使用默认用户设置')
       }
-      
+
       // 加载缓存配置
       const cacheConfig = uni.getStorageSync(STORAGE_KEYS.CACHE_CONFIG)
-      if (cacheConfig) {
+      if (cacheConfig && Object.keys(cacheConfig).length > 0) {
         commit('SET_CACHE_CONFIG', cacheConfig)
+      } else {
+        logger.info('使用默认缓存配置')
       }
-      
+
       commit('SET_LOADED', true)
       logger.info('应用设置加载完成')
-      
+
+      // 验证关键配置
+      if (!state.websocketConfig.host) {
+        logger.warn('WebSocket配置缺少主机地址，使用默认值')
+      }
+
       return true
     } catch (error) {
       logger.error('加载应用设置失败:', error)
+      // 即使加载失败，也要确保有基本配置
+      commit('SET_LOADED', true)
       throw error
     }
   },

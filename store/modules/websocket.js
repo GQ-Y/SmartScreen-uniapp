@@ -100,7 +100,13 @@ const getters = {
 const mutations = {
   // 设置WebSocket管理器
   SET_MANAGER(state, manager) {
-    state.manager = manager
+    // 使用Object.defineProperty确保manager不被Vue响应式系统监听
+    Object.defineProperty(state, 'manager', {
+      value: manager,
+      writable: true,
+      enumerable: false, // 不可枚举，避免被Vue监听
+      configurable: true
+    })
   },
   
   // 设置连接状态
@@ -195,6 +201,20 @@ const mutations = {
   CLEAR_ERROR(state) {
     state.lastError = null
   },
+
+  // 设置内容数据
+  SET_CONTENT_DATA(state, contentData) {
+    state.contentData = contentData
+    state.lastContentUpdate = new Date().toISOString()
+    logger.info('📺 内容数据已更新:', JSON.stringify(contentData, null, 2))
+  },
+
+  // 清除内容数据
+  CLEAR_CONTENT_DATA(state) {
+    state.contentData = null
+    state.lastContentUpdate = null
+    logger.info('🗑️ 内容数据已清除')
+  },
   
   // 重置统计
   RESET_STATS(state) {
@@ -243,8 +263,8 @@ const actions = {
       manager.addEventListener('onStatusChange', ({ newStatus }) => {
         commit('SET_CONNECTION_STATUS', newStatus)
         if (newStatus === CONNECTION_STATUS.RECONNECTING) {
-          const stats = manager.getStats()
-          commit('SET_RECONNECT_ATTEMPTS', stats.reconnectAttempts)
+          // 直接访问reconnectAttempts属性，避免调用getStats()
+          commit('SET_RECONNECT_ATTEMPTS', manager.reconnectAttempts)
         }
       })
       
@@ -264,20 +284,22 @@ const actions = {
   },
   
   // 连接WebSocket
-  async connect({ state, commit, getters }) {
+  async connect({ state, commit, getters, dispatch }) {
     try {
+      // 如果管理器未初始化，先初始化
       if (!state.manager) {
-        throw new Error('WebSocket管理器未初始化')
+        logger.info('WebSocket管理器未初始化，正在初始化...')
+        await dispatch('initialize')
       }
-      
+
       const url = getters.getWebSocketUrl
       logger.info('连接WebSocket:', url)
-      
+
       commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.CONNECTING)
       commit('CLEAR_ERROR')
-      
+
       state.manager.connect(url)
-      
+
       return true
     } catch (error) {
       logger.error('WebSocket连接失败:', error)
@@ -404,18 +426,104 @@ const actions = {
     }
   },
   
+  // 处理推送内容
+  async handlePushContent({ commit }, message) {
+    logger.info('📤 处理推送内容:', JSON.stringify(message.data, null, 2))
+
+    // 将推送内容转换为内容响应格式
+    const contentResponse = {
+      type: 'content_response',
+      success: true,
+      msg: '收到推送内容',
+      data: {
+        device_id: null,
+        display_mode: 4, // 仅直接内容
+        display_mode_name: '推送内容',
+        direct_content: message.data,
+        playlist_contents: [],
+        has_direct_content: true,
+        has_playlist_contents: false,
+        primary_contents: [message.data],
+        secondary_contents: [],
+        total_contents: 1
+      }
+    }
+
+    commit('SET_CONTENT_DATA', contentResponse)
+  },
+
+  // 处理临时内容
+  async handleTempContent({ commit }, message) {
+    logger.info('⏰ 处理临时内容:', JSON.stringify(message.data, null, 2))
+
+    // 临时内容优先显示
+    const contentResponse = {
+      type: 'content_response',
+      success: true,
+      msg: '收到临时内容',
+      data: {
+        device_id: null,
+        display_mode: 4, // 仅直接内容
+        display_mode_name: '临时内容',
+        direct_content: message.data,
+        playlist_contents: [],
+        has_direct_content: true,
+        has_playlist_contents: false,
+        primary_contents: [message.data],
+        secondary_contents: [],
+        total_contents: 1
+      }
+    }
+
+    commit('SET_CONTENT_DATA', contentResponse)
+  },
+
+  // 处理批量控制
+  async handleBatchControl({ dispatch }, message) {
+    logger.info('🎛️ 处理批量控制指令:', JSON.stringify(message, null, 2))
+
+    switch (message.action) {
+      case 'refresh':
+        logger.info('🔄 执行刷新操作')
+        await dispatch('getContent')
+        break
+      case 'restart':
+        logger.info('🔄 执行重启操作')
+        uni.showModal({
+          title: '系统通知',
+          content: message.message || '系统将重启',
+          showCancel: false,
+          success: () => {
+            location.reload()
+          }
+        })
+        break
+      case 'shutdown':
+        logger.info('🔌 执行关闭操作')
+        uni.showModal({
+          title: '系统通知',
+          content: message.message || '系统将关闭',
+          showCancel: false
+        })
+        break
+      default:
+        logger.warn('❓ 未知的批量控制操作:', message.action)
+    }
+  },
+
   // 重置WebSocket
   async reset({ commit, dispatch }) {
     try {
-      logger.info('重置WebSocket状态')
-      
+      logger.info('🔄 重置WebSocket状态')
+
       await dispatch('disconnect')
       commit('RESET_STATS')
       commit('CLEAR_ERROR')
-      
+      commit('CLEAR_CONTENT_DATA')
+
       return true
     } catch (error) {
-      logger.error('重置WebSocket失败:', error)
+      logger.error('❌ 重置WebSocket失败:', error)
       throw error
     }
   }

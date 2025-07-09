@@ -193,18 +193,29 @@ export class DeviceUtils {
    */
   static getAppInfo() {
     try {
-      const accountInfo = uni.getAccountInfoSync()
+      // 尝试获取账户信息（仅在小程序环境中可用）
+      let accountInfo = null
+      try {
+        if (typeof uni.getAccountInfoSync === 'function') {
+          accountInfo = uni.getAccountInfoSync()
+        }
+      } catch (e) {
+        // 在非小程序环境中忽略此错误
+      }
+
       return {
-        appId: accountInfo.miniProgram?.appId || '',
-        version: accountInfo.miniProgram?.version || '1.0.0',
-        envVersion: accountInfo.miniProgram?.envVersion || 'release'
+        appId: accountInfo?.miniProgram?.appId || 'com.smartscreen.app',
+        version: accountInfo?.miniProgram?.version || '1.0.0',
+        envVersion: accountInfo?.miniProgram?.envVersion || 'release',
+        platform: uni.getSystemInfoSync().platform || 'unknown'
       }
     } catch (error) {
       console.error('获取应用信息失败:', error)
       return {
-        appId: '',
+        appId: 'com.smartscreen.app',
         version: '1.0.0',
-        envVersion: 'release'
+        envVersion: 'release',
+        platform: 'unknown'
       }
     }
   }

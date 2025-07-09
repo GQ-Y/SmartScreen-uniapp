@@ -27,7 +27,7 @@ export class WebSocketManager {
     this.reconnectTimer = null
     this.heartbeatTimer = null
     this.connectionTimer = null
-    
+
     // 设备信息
     this.deviceInfo = null
     this.isRegistered = false
@@ -147,9 +147,11 @@ export class WebSocketManager {
    */
   handleMessage(data) {
     try {
-      this.logger.debug('收到WebSocket消息', data)
-      
+      this.logger.info('📥 收到WebSocket原始数据:', data)
+
       const message = MessageFactory.parseMessage(data)
+      this.logger.info('📥 解析后的WebSocket消息:', JSON.stringify(message, null, 2))
+
       this.triggerEvent('onMessage', message)
       
       // 处理特定消息类型
@@ -188,20 +190,23 @@ export class WebSocketManager {
    */
   sendMessage(message) {
     if (this.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
-      this.logger.warn('WebSocket未连接，消息加入队列', message)
+      this.logger.warn('WebSocket未连接，消息加入队列:', JSON.stringify(message, null, 2))
       this.messageQueue.push(message)
       return false
     }
-    
+
     try {
       const data = JSON.stringify(message)
+      this.logger.info('📤 发送WebSocket消息:', JSON.stringify(message, null, 2))
+
       this.socket.send({
         data,
         success: () => {
-          this.logger.debug('消息发送成功', message)
+          this.logger.info('✅ 消息发送成功')
         },
         fail: (error) => {
-          this.logger.error('消息发送失败', error)
+          this.logger.error('❌ 消息发送失败:', error)
+          this.logger.error('失败的消息内容:', JSON.stringify(message, null, 2))
           // 重新加入队列
           this.messageQueue.unshift(message)
         }
@@ -235,8 +240,8 @@ export class WebSocketManager {
    * 处理注册响应
    */
   handleRegisterAck(message) {
-    this.logger.info('收到注册响应', message)
-    
+    this.logger.info('🔐 收到注册响应:', JSON.stringify(message, null, 2))
+
     if (message.success) {
       this.isRegistered = true
       this.isActive = message.active
@@ -275,12 +280,12 @@ export class WebSocketManager {
    * 处理心跳响应
    */
   handleHeartbeatAck(message) {
-    this.logger.debug('收到心跳响应', message)
-    
+    this.logger.info('💓 收到心跳响应:', JSON.stringify(message, null, 2))
+
     if (message.success) {
       this.isActive = message.active
     } else {
-      this.logger.warn('心跳响应失败', message.msg)
+      this.logger.warn('💔 心跳响应失败:', message.msg)
     }
   }
   
@@ -288,11 +293,14 @@ export class WebSocketManager {
    * 处理激活状态变更
    */
   handleActiveStatus(message) {
-    this.logger.info('设备激活状态变更', message)
+    this.logger.info('🔄 设备激活状态变更:', JSON.stringify(message, null, 2))
     this.isActive = message.active
-    
+
     if (this.isActive) {
+      this.logger.info('✅ 设备已激活，自动获取内容')
       this.getContent()
+    } else {
+      this.logger.warn('❌ 设备已禁用')
     }
   }
   

@@ -11,19 +11,24 @@
       <!-- 右上角状态区域 -->
       <view class="status-section">
         <!-- 网络状态 -->
-        <view class="network-status" :class="networkStatusClass">
-          <text class="status-icon">{{ networkIcon }}</text>
-          <text class="status-text">{{ networkStatusText }}</text>
+        <view class="status-indicator" :class="networkStatusClass">
+          <view class="status-icon-wrapper">
+            <SvgIcon :name="networkIconName" :color="networkIconColor" :size="18" />
+          </view>
+          <text class="status-label">{{ networkStatusText }}</text>
         </view>
 
         <!-- WebSocket连接状态 -->
-        <view class="websocket-status" :class="websocketStatusClass">
-          <text class="status-icon">{{ websocketIcon }}</text>
-          <text class="status-text">{{ websocketStatusText }}</text>
+        <view class="status-indicator" :class="websocketStatusClass">
+          <view class="status-icon-wrapper">
+            <SvgIcon :name="websocketIconName" :color="websocketIconColor" :size="18" />
+          </view>
+          <text class="status-label">{{ websocketStatusText }}</text>
         </view>
 
         <!-- 时间显示 -->
         <view class="time-display">
+          <SvgIcon name="time" :color="'rgba(255,255,255,0.8)'" :size="16" />
           <text class="time-text">{{ currentTime }}</text>
         </view>
       </view>
@@ -34,7 +39,7 @@
       <!-- 中央状态显示 -->
       <view class="center-status">
         <view class="status-icon-large" :class="mainStatusClass">
-          <text class="large-icon">{{ mainStatusIcon }}</text>
+          <SvgIcon :name="mainStatusIconName" :color="mainStatusIconColor" :size="80" />
         </view>
 
         <view class="status-text-area">
@@ -94,11 +99,15 @@
 import { mapGetters, mapActions } from 'vuex'
 import { Logger } from '../../common/utils/logger.js'
 import { globalKeyHandler, KEYS } from '../../common/utils/keyHandler.js'
+import SvgIcon from '../../components/SvgIcon.vue'
 
 const logger = Logger.createTaggedLogger('IndexPage')
 
 export default {
   name: 'IndexPage',
+  components: {
+    SvgIcon
+  },
 
   data() {
     return {
@@ -149,17 +158,22 @@ export default {
       }
     },
 
-    networkIcon() {
+    networkIconName() {
       const status = this.getNetworkStatus
-      if (!status.isConnected) return '📶'
+      if (!status.isConnected) return 'network'
 
       switch (status.type) {
-        case 'wifi': return '📶'
+        case 'wifi': return 'wifi'
         case '4g':
-        case '5g': return '📱'
-        case 'ethernet': return '🌐'
-        default: return '📶'
+        case '5g': return 'cellular'
+        case 'ethernet': return 'ethernet'
+        default: return 'network'
       }
+    },
+
+    networkIconColor() {
+      const status = this.getNetworkStatus
+      return status.isConnected ? '#4CAF50' : '#F44336'
     },
 
     networkStatusText() {
@@ -185,11 +199,18 @@ export default {
       }
     },
 
-    websocketIcon() {
+    websocketIconName() {
       const status = this.getConnectionStatus
-      if (status.isConnected) return '🔗'
-      if (status.status === 'connecting') return '🔄'
-      return '🔌'
+      if (status.isConnected) return 'websocket-connected'
+      if (status.status === 'connecting') return 'websocket-connecting'
+      return 'websocket-disconnected'
+    },
+
+    websocketIconColor() {
+      const status = this.getConnectionStatus
+      if (status.isConnected) return '#4CAF50'
+      if (status.status === 'connecting') return '#FF9800'
+      return '#F44336'
     },
 
     websocketStatusText() {
@@ -212,11 +233,18 @@ export default {
       return 'status-active'
     },
 
-    mainStatusIcon() {
-      if (!this.isDeviceOnline) return '📱'
-      if (!this.getConnectionStatus.isConnected) return '🔌'
-      if (!this.getConnectionStatus.isActive) return '⏸️'
-      return '✅'
+    mainStatusIconName() {
+      if (!this.isDeviceOnline) return 'device-offline'
+      if (!this.getConnectionStatus.isConnected) return 'device-disconnected'
+      if (!this.getConnectionStatus.isActive) return 'device-inactive'
+      return 'device-ready'
+    },
+
+    mainStatusIconColor() {
+      if (!this.isDeviceOnline) return '#9E9E9E'
+      if (!this.getConnectionStatus.isConnected) return '#F44336'
+      if (!this.getConnectionStatus.isActive) return '#FF9800'
+      return '#4CAF50'
     },
 
     mainStatusText() {
@@ -287,6 +315,9 @@ export default {
       if (!this.isAppInitialized) {
         await this.initializeApp()
       }
+
+      // 自动连接WebSocket
+      await this.autoConnectWebSocket()
 
       // 开始时间更新
       this.startTimeUpdate()
@@ -377,6 +408,79 @@ export default {
       }
     },
 
+    // 自动连接WebSocket
+    async autoConnectWebSocket() {
+      try {
+        logger.info('开始自动连接WebSocket')
+        this.loadingText = '正在连接服务器...'
+
+        // 检查网络状态
+        if (!this.isDeviceOnline) {
+          logger.warn('设备离线，跳过WebSocket连接')
+          return
+        }
+
+        // 连接WebSocket
+        await this.connect()
+
+        logger.info('WebSocket自动连接成功')
+
+        // 连接成功后，等待一下再尝试获取内容
+        setTimeout(async () => {
+          try {
+            const status = this.getConnectionStatus
+            if (status.isConnected && status.isRegistered && status.isActive) {
+              logger.info('设备已激活，自动获取内容')
+              await this.getContent()
+            } else {
+              logger.info('设备未激活或未注册，等待激活')
+            }
+          } catch (error) {
+            logger.warn('自动获取内容失败:', error)
+          }
+        }, 2000)
+
+      } catch (error) {
+        logger.error('WebSocket自动连接失败:', error)
+        // 自动连接失败不显示错误提示，避免干扰用户
+        // 用户可以手动点击连接按钮
+      }
+    },
+
+    // 处理手动连接
+    async handleConnect() {
+      try {
+        logger.info('用户手动连接WebSocket')
+        this.isLoading = true
+        this.loadingText = '正在连接服务器...'
+
+        await this.connect()
+
+        uni.showToast({
+          title: '连接成功',
+          icon: 'success'
+        })
+
+        // 连接成功后尝试获取内容
+        setTimeout(async () => {
+          try {
+            await this.getContent()
+          } catch (error) {
+            logger.warn('获取内容失败:', error)
+          }
+        }, 1000)
+
+      } catch (error) {
+        logger.error('手动连接失败:', error)
+        uni.showToast({
+          title: '连接失败',
+          icon: 'error'
+        })
+      } finally {
+        this.isLoading = false
+      }
+    },
+
     // 处理刷新
     async handleRefresh() {
       try {
@@ -398,6 +502,26 @@ export default {
         })
       } finally {
         this.isLoading = false
+      }
+    },
+
+    // 处理获取内容
+    async handleGetContent() {
+      try {
+        logger.info('用户点击获取内容按钮')
+        await this.getContent()
+
+        uni.showToast({
+          title: '正在获取内容',
+          icon: 'loading',
+          duration: 1500
+        })
+      } catch (error) {
+        logger.error('获取内容失败:', error)
+        uni.showToast({
+          title: '获取内容失败',
+          icon: 'error'
+        })
       }
     },
 
@@ -606,56 +730,68 @@ export default {
 .status-section {
   display: flex;
   align-items: center;
-  gap: 40rpx;
+  gap: 20rpx;
 }
 
-.network-status,
-.websocket-status {
+.status-indicator {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  padding: 10rpx 20rpx;
-  border-radius: 20rpx;
-  background: rgba(255, 255, 255, 0.1);
+  gap: 8rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8rpx);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   transition: all 0.3s ease;
+  min-width: 80rpx;
 }
 
-.network-status.status-connected,
-.websocket-status.status-connected {
-  background: rgba(76, 175, 80, 0.3);
-  border: 1px solid rgba(76, 175, 80, 0.5);
+.status-indicator.status-connected {
+  background: rgba(76, 175, 80, 0.15);
+  border-color: rgba(76, 175, 80, 0.3);
 }
 
-.network-status.status-disconnected,
-.websocket-status.status-disconnected {
-  background: rgba(244, 67, 54, 0.3);
-  border: 1px solid rgba(244, 67, 54, 0.5);
+.status-indicator.status-disconnected {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: rgba(244, 67, 54, 0.3);
 }
 
-.websocket-status.status-connecting {
-  background: rgba(255, 193, 7, 0.3);
-  border: 1px solid rgba(255, 193, 7, 0.5);
+.status-indicator.status-connecting {
+  background: rgba(255, 193, 7, 0.15);
+  border-color: rgba(255, 193, 7, 0.3);
 }
 
-.status-icon {
-  font-size: 24rpx;
+.status-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24rpx;
+  height: 24rpx;
 }
 
-.status-text {
-  font-size: 24rpx;
+.status-label {
+  font-size: 22rpx;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
 }
 
 .time-display {
-  padding: 10rpx 20rpx;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 16rpx;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8rpx);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16rpx;
 }
 
 .time-text {
-  font-size: 28rpx;
+  font-size: 24rpx;
   font-weight: 600;
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* 主内容区域 */
@@ -709,9 +845,7 @@ export default {
   box-shadow: 0 0 30rpx rgba(158, 158, 158, 0.3);
 }
 
-.large-icon {
-  font-size: 80rpx;
-}
+/* 移除large-icon样式，现在使用SVG图标 */
 
 .status-text-area {
   margin-bottom: 60rpx;
@@ -895,7 +1029,24 @@ export default {
   }
 
   .status-section {
-    gap: 20rpx;
+    gap: 12rpx;
+  }
+
+  .status-indicator {
+    padding: 6rpx 12rpx;
+    min-width: 60rpx;
+  }
+
+  .status-label {
+    font-size: 20rpx;
+  }
+
+  .time-display {
+    padding: 6rpx 12rpx;
+  }
+
+  .time-text {
+    font-size: 22rpx;
   }
 
   .main-content {

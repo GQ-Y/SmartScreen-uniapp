@@ -106,29 +106,43 @@ const store = createStore({
   
   actions: {
     // 初始化应用
-    async initializeApp({ commit, dispatch }) {
+    async initializeApp({ commit, dispatch, getters }) {
       try {
         logger.info('开始初始化应用')
-        
+
         // 初始化设备信息
         await dispatch('device/initializeDevice')
-        
+
         // 初始化设置
         await dispatch('settings/loadSettings')
-        
+
+        // 等待一下确保设置已加载
+        await new Promise(resolve => setTimeout(resolve, 100))
+
         // 初始化WebSocket（如果配置存在）
-        const wsConfig = await dispatch('settings/getWebSocketConfig')
-        if (wsConfig.host && wsConfig.port) {
-          await dispatch('websocket/initialize', wsConfig)
+        try {
+          const wsConfig = getters['settings/getWebSocketConfig']
+          logger.info('WebSocket配置:', wsConfig)
+
+          if (wsConfig && typeof wsConfig === 'object' && wsConfig.host && wsConfig.port) {
+            logger.info('初始化WebSocket管理器')
+            await dispatch('websocket/initialize', wsConfig)
+          } else {
+            logger.info('WebSocket配置不完整，跳过初始化')
+          }
+        } catch (wsError) {
+          logger.warn('WebSocket初始化失败，但继续应用初始化:', wsError)
         }
-        
+
         commit('SET_INITIALIZED', true)
         logger.info('应用初始化完成')
-        
+
         return true
       } catch (error) {
         logger.error('应用初始化失败:', error)
         commit('SET_GLOBAL_ERROR', error)
+        // 即使初始化失败，也标记为已初始化，避免无限重试
+        commit('SET_INITIALIZED', true)
         throw error
       }
     },

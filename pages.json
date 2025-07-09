@@ -5,13 +5,6 @@
 				"navigationBarTitleText": "SmartScreen",
 				"navigationStyle": "custom"
 			}
-		},
-		{
-			"path": "pages/settings/settings",
-			"style": {
-				"navigationBarTitleText": "设置",
-				"navigationStyle": "custom"
-			}
 		}
 	],
 	"globalStyle": {

@@ -6,7 +6,6 @@ import { createStore } from 'vuex'
 import websocket from './modules/websocket.js'
 import device from './modules/device.js'
 import player from './modules/player.js'
-import settings from './modules/settings.js'
 import { Logger } from '../common/utils/logger.js'
 
 const logger = Logger.createTaggedLogger('Store')
@@ -113,22 +112,19 @@ const store = createStore({
         // 初始化设备信息
         await dispatch('device/initializeDevice')
 
-        // 初始化设置
-        await dispatch('settings/loadSettings')
-
-        // 等待一下确保设置已加载
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-        // 初始化WebSocket（如果配置存在）
+        // 初始化WebSocket
         try {
-          const wsConfig = getters['settings/getWebSocketConfig']
-          logger.info('WebSocket配置:', wsConfig)
+          logger.info('初始化WebSocket管理器')
+          await dispatch('websocket/initialize')
 
-          if (wsConfig && typeof wsConfig === 'object' && wsConfig.host && wsConfig.port) {
-            logger.info('初始化WebSocket管理器')
-            await dispatch('websocket/initialize', wsConfig)
-          } else {
-            logger.info('WebSocket配置不完整，跳过初始化')
+          // 初始化完成后立即连接
+          logger.info('WebSocket管理器初始化完成，开始自动连接')
+          try {
+            await dispatch('websocket/connect')
+            logger.info('WebSocket自动连接成功')
+          } catch (connectError) {
+            logger.warn('WebSocket自动连接失败:', connectError)
+            // 连接失败不阻止应用初始化
           }
         } catch (wsError) {
           logger.warn('WebSocket初始化失败，但继续应用初始化:', wsError)
@@ -216,8 +212,7 @@ const store = createStore({
   modules: {
     websocket,
     device,
-    player,
-    settings
+    player
   },
   
   // 开发环境下启用严格模式

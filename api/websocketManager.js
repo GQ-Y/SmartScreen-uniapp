@@ -3,20 +3,20 @@
  * 基于uni.connectSocket实现WebSocket连接管理
  */
 
-import { 
-  WEBSOCKET_CONFIG, 
-  MESSAGE_TYPES, 
-  CONNECTION_STATUS,
-  STORAGE_KEYS 
+import {
+  WEBSOCKET_CONFIG,
+  MESSAGE_TYPES,
+  CONNECTION_STATUS
 } from '../common/constants/constants.js'
-import { 
+import {
   MessageFactory,
   RegisterMessage,
   HeartbeatMessage,
-  GetContentMessage 
+  GetContentMessage
 } from '../common/types/messageTypes.js'
 import { DeviceUtils } from '../common/utils/deviceUtils.js'
 import { Logger } from '../common/utils/logger.js'
+import { WEBSOCKET_CONFIG as WS_CONFIG } from './config.js'
 
 export class WebSocketManager {
   constructor() {
@@ -147,11 +147,9 @@ export class WebSocketManager {
    */
   handleMessage(data) {
     try {
-      this.logger.info('📥 收到WebSocket原始数据:', data)
 
       const message = MessageFactory.parseMessage(data)
       this.logger.info('📥 解析后的WebSocket消息:', JSON.stringify(message, null, 2))
-
       this.triggerEvent('onMessage', message)
       
       // 处理特定消息类型
@@ -197,15 +195,15 @@ export class WebSocketManager {
 
     try {
       const data = JSON.stringify(message)
-      this.logger.info('📤 发送WebSocket消息:', JSON.stringify(message, null, 2))
+      this.logger.info('发送WebSocket消息:', JSON.stringify(message, null, 2))
 
       this.socket.send({
         data,
         success: () => {
-          this.logger.info('✅ 消息发送成功')
+          this.logger.info('消息发送成功')
         },
         fail: (error) => {
-          this.logger.error('❌ 消息发送失败:', error)
+          this.logger.error('消息发送失败:', error)
           this.logger.error('失败的消息内容:', JSON.stringify(message, null, 2))
           // 重新加入队列
           this.messageQueue.unshift(message)
@@ -240,7 +238,7 @@ export class WebSocketManager {
    * 处理注册响应
    */
   handleRegisterAck(message) {
-    this.logger.info('🔐 收到注册响应:', JSON.stringify(message, null, 2))
+    this.logger.info('收到注册响应:', JSON.stringify(message, null, 2))
 
     if (message.success) {
       this.isRegistered = true
@@ -280,12 +278,12 @@ export class WebSocketManager {
    * 处理心跳响应
    */
   handleHeartbeatAck(message) {
-    this.logger.info('💓 收到心跳响应:', JSON.stringify(message, null, 2))
+    this.logger.info('收到心跳响应:', JSON.stringify(message, null, 2))
 
     if (message.success) {
       this.isActive = message.active
     } else {
-      this.logger.warn('💔 心跳响应失败:', message.msg)
+      this.logger.warn('心跳响应失败:', message.msg)
     }
   }
   
@@ -293,14 +291,14 @@ export class WebSocketManager {
    * 处理激活状态变更
    */
   handleActiveStatus(message) {
-    this.logger.info('🔄 设备激活状态变更:', JSON.stringify(message, null, 2))
+    this.logger.info('设备激活状态变更:', JSON.stringify(message, null, 2))
     this.isActive = message.active
 
     if (this.isActive) {
-      this.logger.info('✅ 设备已激活，自动获取内容')
+      this.logger.info('设备已激活，自动获取内容')
       this.getContent()
     } else {
-      this.logger.warn('❌ 设备已禁用')
+      this.logger.warn('设备已禁用')
     }
   }
   
@@ -489,32 +487,11 @@ export class WebSocketManager {
    * 获取WebSocket URL
    */
   getWebSocketUrl() {
-    try {
-      const config = uni.getStorageSync(STORAGE_KEYS.WEBSOCKET_CONFIG)
-      if (config && config.host && config.port) {
-        return `ws://${config.host}:${config.port}/ws`
-      }
-    } catch (error) {
-      this.logger.warn('获取WebSocket配置失败', error)
-    }
-
-    return WEBSOCKET_CONFIG.DEFAULT_URL
+    // 使用配置文件中的地址和端口
+    return WS_CONFIG.getUrl()
   }
 
-  /**
-   * 设置WebSocket配置
-   */
-  setWebSocketConfig(host, port) {
-    try {
-      const config = { host, port }
-      uni.setStorageSync(STORAGE_KEYS.WEBSOCKET_CONFIG, config)
-      this.logger.info('WebSocket配置已保存', config)
-      return true
-    } catch (error) {
-      this.logger.error('保存WebSocket配置失败', error)
-      return false
-    }
-  }
+
 
   /**
    * 添加事件监听器

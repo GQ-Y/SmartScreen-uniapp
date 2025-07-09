@@ -5,6 +5,7 @@
 import { WebSocketManager } from '../../api/websocketManager.js'
 import { CONNECTION_STATUS, MESSAGE_TYPES } from '../../common/constants/constants.js'
 import { Logger } from '../../common/utils/logger.js'
+// import { MediaCacheManager } from '../../common/utils/cacheManager.js' // 已注释掉缓存系统
 
 const logger = Logger.createTaggedLogger('WebSocketStore')
 
@@ -18,12 +19,7 @@ const state = {
   isRegistered: false,
   isActive: false,
   
-  // 连接配置
-  config: {
-    host: 'localhost',
-    port: 9502,
-    url: ''
-  },
+
   
   // 连接统计
   reconnectAttempts: 0,
@@ -52,16 +48,7 @@ const getters = {
     reconnectAttempts: state.reconnectAttempts
   }),
   
-  // 获取连接配置
-  getConfig: state => ({ ...state.config }),
-  
-  // 获取WebSocket URL
-  getWebSocketUrl: state => {
-    if (state.config.url) {
-      return state.config.url
-    }
-    return `ws://${state.config.host}:${state.config.port}/ws`
-  },
+
   
   // 检查是否可以发送消息
   canSendMessage: state => {
@@ -94,7 +81,31 @@ const getters = {
   getLastMessage: state => state.lastMessage,
   
   // 获取消息队列
-  getMessageQueue: state => [...state.messageQueue]
+  getMessageQueue: state => [...state.messageQueue],
+
+  // 获取内容数据
+  getContentData: state => state.contentData,
+
+  // 获取最后内容更新时间
+  getLastContentUpdate: state => state.lastContentUpdate,
+
+  // 检查是否有内容
+  hasContent: state => {
+    const hasData = state.contentData &&
+                   state.contentData.success &&
+                   state.contentData.data &&
+                   state.contentData.data.total_contents > 0
+
+    logger.info('hasContent检查:', {
+      hasContentData: !!state.contentData,
+      success: state.contentData?.success,
+      hasData: !!state.contentData?.data,
+      totalContents: state.contentData?.data?.total_contents,
+      result: hasData
+    })
+
+    return hasData
+  }
 }
 
 const mutations = {
@@ -139,11 +150,7 @@ const mutations = {
     logger.info(`设备激活状态: ${isActive}`)
   },
   
-  // 设置连接配置
-  SET_CONFIG(state, config) {
-    state.config = { ...state.config, ...config }
-    logger.info('WebSocket配置更新:', state.config)
-  },
+
   
   // 设置重连次数
   SET_RECONNECT_ATTEMPTS(state, attempts) {
@@ -206,14 +213,27 @@ const mutations = {
   SET_CONTENT_DATA(state, contentData) {
     state.contentData = contentData
     state.lastContentUpdate = new Date().toISOString()
-    logger.info('📺 内容数据已更新:', JSON.stringify(contentData, null, 2))
+    
+    // 已注释掉缓存系统 - 不对内容进行缓存
+    // if (contentData && contentData.data) {
+    //   const deviceId = contentData.data.device_id
+    //   // 使用setTimeout确保缓存操作完全异步
+    //   setTimeout(() => {
+    //     MediaCacheManager.cacheContentMedia(contentData, deviceId).then(result => {
+    //       if (result.success && result.total > 0) {
+    //         logger.info(`媒体文件缓存完成: ${result.cached}/${result.total}`)
+    //       }
+    //     }).catch(error => {
+    //       // 缓存失败不影响播放，静默处理
+    //     })
+    //   }, 100) // 延迟100ms开始缓存，确保内容已开始播放
+    // }
   },
 
   // 清除内容数据
   CLEAR_CONTENT_DATA(state) {
     state.contentData = null
     state.lastContentUpdate = null
-    logger.info('🗑️ 内容数据已清除')
   },
   
   // 重置统计
@@ -229,37 +249,31 @@ const mutations = {
 
 const actions = {
   // 初始化WebSocket
-  async initialize({ commit, dispatch }, config = {}) {
+  async initialize({ commit, dispatch }) {
     try {
-      logger.info('初始化WebSocket管理器')
-      
+
       // 创建WebSocket管理器
       const manager = new WebSocketManager()
       commit('SET_MANAGER', manager)
-      
-      // 设置配置
-      if (config.host || config.port) {
-        commit('SET_CONFIG', config)
-      }
-      
+
       // 设置事件监听器
       manager.addEventListener('onConnect', () => {
         commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.CONNECTED)
         commit('SET_RECONNECT_ATTEMPTS', 0)
         commit('CLEAR_ERROR')
       })
-      
+
       manager.addEventListener('onDisconnect', () => {
         commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.DISCONNECTED)
         commit('SET_REGISTERED', false)
         commit('SET_ACTIVE', false)
       })
-      
+
       manager.addEventListener('onError', (error) => {
         commit('SET_ERROR', error)
         commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.ERROR)
       })
-      
+
       manager.addEventListener('onStatusChange', ({ newStatus }) => {
         commit('SET_CONNECTION_STATUS', newStatus)
         if (newStatus === CONNECTION_STATUS.RECONNECTING) {
@@ -267,42 +281,36 @@ const actions = {
           commit('SET_RECONNECT_ATTEMPTS', manager.reconnectAttempts)
         }
       })
-      
+
       manager.addEventListener('onMessage', (message) => {
         commit('INCREMENT_MESSAGES_RECEIVED')
         commit('SET_LAST_MESSAGE', message)
         dispatch('handleMessage', message)
       })
-      
-      logger.info('WebSocket管理器初始化完成')
+
       return true
     } catch (error) {
-      logger.error('WebSocket管理器初始化失败:', error)
       commit('SET_ERROR', error)
       throw error
     }
   },
   
   // 连接WebSocket
-  async connect({ state, commit, getters, dispatch }) {
+  async connect({ state, commit, dispatch }) {
     try {
       // 如果管理器未初始化，先初始化
       if (!state.manager) {
-        logger.info('WebSocket管理器未初始化，正在初始化...')
         await dispatch('initialize')
       }
 
-      const url = getters.getWebSocketUrl
-      logger.info('连接WebSocket:', url)
 
       commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.CONNECTING)
       commit('CLEAR_ERROR')
 
-      state.manager.connect(url)
+      state.manager.connect()
 
       return true
     } catch (error) {
-      logger.error('WebSocket连接失败:', error)
       commit('SET_ERROR', error)
       throw error
     }
@@ -312,7 +320,6 @@ const actions = {
   async disconnect({ state, commit }) {
     try {
       if (state.manager) {
-        logger.info('断开WebSocket连接')
         state.manager.disconnect()
       }
       
@@ -323,7 +330,6 @@ const actions = {
       
       return true
     } catch (error) {
-      logger.error('断开WebSocket连接失败:', error)
       commit('SET_ERROR', error)
       throw error
     }
@@ -345,7 +351,6 @@ const actions = {
       
       return success
     } catch (error) {
-      logger.error('发送消息失败:', error)
       commit('SET_ERROR', error)
       throw error
     }
@@ -354,7 +359,6 @@ const actions = {
   // 处理接收到的消息
   handleMessage({ commit, dispatch }, message) {
     try {
-      logger.debug('处理WebSocket消息:', message.type)
       
       switch (message.type) {
         case MESSAGE_TYPES.REGISTER_ACK:
@@ -375,10 +379,22 @@ const actions = {
           break
           
         case MESSAGE_TYPES.CONTENT_RESPONSE:
+          // 先停止当前播放的内容，再设置新内容
+          dispatch('stopCurrentContent')
+          // 处理内容响应
+          commit('SET_CONTENT_DATA', message)
+          break
+
         case MESSAGE_TYPES.PUSH_CONTENT:
+          // 先停止当前播放的内容，再处理推送内容
+          dispatch('stopCurrentContent')
+          dispatch('handlePushContent', message)
+          break
+
         case MESSAGE_TYPES.TEMP_CONTENT:
-          // 转发给播放器模块处理
-          dispatch('player/handleContent', message, { root: true })
+          // 先停止当前播放的内容，再处理临时内容
+          dispatch('stopCurrentContent')
+          dispatch('handleTempContent', message)
           break
           
         case MESSAGE_TYPES.DISPLAY_MODE_CHANGE:
@@ -402,15 +418,7 @@ const actions = {
     }
   },
   
-  // 设置WebSocket配置
-  setConfig({ commit, state }, config) {
-    commit('SET_CONFIG', config)
-    
-    // 如果管理器存在，更新配置
-    if (state.manager) {
-      state.manager.setWebSocketConfig(config.host, config.port)
-    }
-  },
+
   
   // 获取内容
   async getContent({ state }) {
@@ -428,7 +436,6 @@ const actions = {
   
   // 处理推送内容
   async handlePushContent({ commit }, message) {
-    logger.info('📤 处理推送内容:', JSON.stringify(message.data, null, 2))
 
     // 将推送内容转换为内容响应格式
     const contentResponse = {
@@ -454,7 +461,6 @@ const actions = {
 
   // 处理临时内容
   async handleTempContent({ commit }, message) {
-    logger.info('⏰ 处理临时内容:', JSON.stringify(message.data, null, 2))
 
     // 临时内容优先显示
     const contentResponse = {
@@ -478,17 +484,33 @@ const actions = {
     commit('SET_CONTENT_DATA', contentResponse)
   },
 
+  // 停止当前播放的内容
+  stopCurrentContent({ state }) {
+    try {
+      const currentContentData = state.contentData
+      if (currentContentData && currentContentData.data) {
+
+        // 通过事件总线通知所有播放器停止
+        uni.$emit('stopAllPlayers')
+
+        // 也可以通过 player 模块停止
+        // dispatch('player/stop', null, { root: true })
+      }
+    } catch (error) {
+      logger.error('停止当前内容时出错:', error)
+    }
+  },
+
   // 处理批量控制
   async handleBatchControl({ dispatch }, message) {
-    logger.info('🎛️ 处理批量控制指令:', JSON.stringify(message, null, 2))
 
     switch (message.action) {
       case 'refresh':
-        logger.info('🔄 执行刷新操作')
+        logger.info('执行刷新操作')
         await dispatch('getContent')
         break
       case 'restart':
-        logger.info('🔄 执行重启操作')
+        logger.info('执行重启操作')
         uni.showModal({
           title: '系统通知',
           content: message.message || '系统将重启',
@@ -499,7 +521,7 @@ const actions = {
         })
         break
       case 'shutdown':
-        logger.info('🔌 执行关闭操作')
+        logger.info('执行关闭操作')
         uni.showModal({
           title: '系统通知',
           content: message.message || '系统将关闭',
@@ -507,14 +529,13 @@ const actions = {
         })
         break
       default:
-        logger.warn('❓ 未知的批量控制操作:', message.action)
+        logger.warn('未知的批量控制操作:', message.action)
     }
   },
 
   // 重置WebSocket
   async reset({ commit, dispatch }) {
     try {
-      logger.info('🔄 重置WebSocket状态')
 
       await dispatch('disconnect')
       commit('RESET_STATS')
@@ -523,7 +544,6 @@ const actions = {
 
       return true
     } catch (error) {
-      logger.error('❌ 重置WebSocket失败:', error)
       throw error
     }
   }

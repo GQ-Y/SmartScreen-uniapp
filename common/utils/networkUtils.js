@@ -186,8 +186,35 @@ export class NetworkUtils {
   /**
    * 检查网络速度
    */
-  static async checkNetworkSpeed(testUrl = 'https://www.baidu.com', testSize = 1024) {
+  static async checkNetworkSpeed(testUrl = null, testSize = 1024) {
     try {
+      // 如果没有提供测试URL，返回基础网络信息而不进行实际的速度测试
+      if (!testUrl) {
+        const networkInfo = await this.checkConnection()
+        
+        // 根据网络类型提供估算的速度信息
+        const speedEstimates = {
+          '5g': { speedMbps: 100, speedKbps: 102400, speed: 104857600 },
+          '4g': { speedMbps: 50, speedKbps: 51200, speed: 52428800 },
+          'wifi': { speedMbps: 30, speedKbps: 30720, speed: 31457280 },
+          '3g': { speedMbps: 5, speedKbps: 5120, speed: 5242880 },
+          '2g': { speedMbps: 0.5, speedKbps: 512, speed: 524288 },
+          'ethernet': { speedMbps: 100, speedKbps: 102400, speed: 104857600 }
+        }
+        
+        const estimate = speedEstimates[networkInfo.networkType] || speedEstimates['wifi']
+        
+        return {
+          duration: 1,
+          speed: estimate.speed,
+          speedKbps: estimate.speedKbps,
+          speedMbps: estimate.speedMbps,
+          isEstimate: true,
+          networkType: networkInfo.networkType
+        }
+      }
+      
+      // 如果提供了测试URL，进行实际的速度测试
       const startTime = Date.now()
       await this.get(testUrl)
       const endTime = Date.now()
@@ -199,15 +226,20 @@ export class NetworkUtils {
         duration,
         speed,
         speedKbps: speed / 1024,
-        speedMbps: speed / (1024 * 1024)
+        speedMbps: speed / (1024 * 1024),
+        isEstimate: false
       }
     } catch (error) {
-      console.warn('网络速度检测失败:', error)
+      console.warn('网络速度检测失败，返回估算值:', error)
+      
+      // 发生错误时返回保守的估算值
       return {
         duration: 0,
-        speed: 0,
-        speedKbps: 0,
-        speedMbps: 0
+        speed: 10485760, // 10MB/s
+        speedKbps: 10240,
+        speedMbps: 10,
+        isEstimate: true,
+        error: error.message
       }
     }
   }

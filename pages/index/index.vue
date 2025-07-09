@@ -1,7 +1,7 @@
 <template>
   <view class="smart-screen-container">
     <!-- 顶部状态栏 -->
-    <view class="top-bar">
+    <view class="top-bar" style="display: none;">
       <!-- 左上角Logo -->
       <view class="logo-section">
         <image class="logo" src="/static/logo.png" mode="aspectFit"></image>
@@ -36,8 +36,101 @@
 
     <!-- 主内容区域 -->
     <view class="main-content">
-      <!-- 中央状态显示 -->
-      <view class="center-status">
+      <!-- 直接显示内容 -->
+      <view v-if="currentContent" class="content-display">
+        <!-- 网页内容 (content_type: 1) -->
+        <web-view
+          v-if="currentContent.content_type === CONTENT_TYPES.WEBPAGE"
+          :src="currentContent.content_url"
+          class="content-webview"
+          @load="handleContentLoad"
+          @error="handleContentError"
+        />
+
+        <!-- 图片内容 (content_type: 2) -->
+        <image
+          v-else-if="currentContent.content_type === CONTENT_TYPES.IMAGE"
+          :src="currentContent.content_url"
+          class="content-image"
+          mode="aspectFit"
+          @load="handleContentLoad"
+          @error="handleContentError"
+        />
+
+        <!-- 视频内容 (content_type: 3) -->
+        <VideoPlayer
+          ref="videoPlayer"
+          v-else-if="currentContent.content_type === CONTENT_TYPES.VIDEO"
+          :src="currentContent.content_url"
+          :content-info="currentContent"
+          :autoplay="true"
+          :show-controls="false"
+          :loop="false"
+          :muted="false"
+          :show-progress="false"
+          :poster="currentContent.thumbnail"
+          :show-info="true"
+          :show-play-indicator="false"
+          @play="handleContentLoad"
+          @error="handleContentError"
+          @ended="handleVideoEnded"
+          @retry-failed="handleRetryFailed"
+        />
+
+        <!-- 直播流内容 (content_type: 4) -->
+        <VideoPlayer
+          ref="livePlayer"
+          v-else-if="currentContent.content_type === CONTENT_TYPES.LIVE_STREAM"
+          :src="currentContent.content_url"
+          :content-info="currentContent"
+          :autoplay="true"
+          :show-controls="false"
+          :loop="false"
+          :muted="false"
+          :show-progress="false"
+          :poster="currentContent.thumbnail"
+          :show-info="true"
+          :show-play-indicator="false"
+          @play="handleContentLoad"
+          @error="handleContentError"
+          @retry-failed="handleRetryFailed"
+        />
+
+        <!-- 音频内容 (content_type: 5) -->
+        <AudioPlayer
+          ref="audioPlayer"
+          v-else-if="currentContent.content_type === CONTENT_TYPES.AUDIO"
+          :src="currentContent.content_url"
+          :content-info="currentContent"
+          :autoplay="true"
+          :loop="false"
+          :show-controls="false"
+          :show-progress="true"
+          :cover-image="currentContent.thumbnail"
+          :background-image="currentContent.thumbnail"
+          @play="handleContentLoad"
+          @error="handleContentError"
+          @ended="handleAudioEnded"
+          @retry-failed="handleRetryFailed"
+        />
+
+        <!-- 未知类型内容 -->
+        <view v-else class="content-unknown">
+          <view class="unknown-content-info">
+            <SvgIcon name="warning" :color="'#FF9800'" :size="60" />
+            <text class="unknown-content-text">不支持的内容类型: {{ currentContent.content_type }}</text>
+            <text class="unknown-content-url">{{ currentContent.content_url }}</text>
+          </view>
+        </view>
+
+        <!-- 内容标题覆盖层 -->
+        <view class="content-title-overlay" v-if="currentContent.title && currentContent.content_type !== CONTENT_TYPES.AUDIO">
+          <text class="content-title-text">{{ currentContent.title }}</text>
+        </view>
+      </view>
+
+      <!-- 中央状态显示（当没有内容时显示） -->
+      <view v-else class="center-status">
         <view class="status-icon-large" :class="mainStatusClass">
           <SvgIcon :name="mainStatusIconName" :color="mainStatusIconColor" :size="80" />
         </view>
@@ -57,30 +150,17 @@
 
         <!-- 操作按钮 -->
         <view class="action-buttons" v-if="showActionButtons">
-          <button class="action-btn primary" @click="handleConnect" v-if="!isConnected">
-            连接服务器
-          </button>
           <button class="action-btn" @click="handleRefresh" v-if="isConnected">
             刷新内容
           </button>
-          <button class="action-btn" @click="handleSettings">
-            设置
-          </button>
         </view>
       </view>
 
-      <!-- 调试信息 -->
-      <view class="debug-info" v-if="showDebugInfo">
-        <text class="debug-title">调试信息</text>
-        <view class="debug-item" v-for="(item, key) in debugData" :key="key">
-          <text class="debug-key">{{ key }}:</text>
-          <text class="debug-value">{{ item }}</text>
-        </view>
-      </view>
+
     </view>
 
     <!-- 底部版权信息 -->
-    <view class="footer">
+    <view class="footer" style="display: none;">
       <text class="copyright">© 2024 SmartScreen Team. All rights reserved.</text>
       <text class="version">版本 {{ appVersion }}</text>
     </view>
@@ -99,14 +179,19 @@
 import { mapGetters, mapActions } from 'vuex'
 import { Logger } from '../../common/utils/logger.js'
 import { globalKeyHandler, KEYS } from '../../common/utils/keyHandler.js'
+import { CONTENT_TYPES } from '../../common/constants/constants.js'
 import SvgIcon from '../../components/SvgIcon.vue'
+import VideoPlayer from '../../components/VideoPlayer.vue'
+import AudioPlayer from '../../components/AudioPlayer.vue'
 
 const logger = Logger.createTaggedLogger('IndexPage')
 
 export default {
   name: 'IndexPage',
   components: {
-    SvgIcon
+    SvgIcon,
+    VideoPlayer,
+    AudioPlayer
   },
 
   data() {
@@ -116,10 +201,18 @@ export default {
       isLoading: false,
       loadingText: '正在初始化...',
 
+      // 内容类型常量
+      CONTENT_TYPES,
+
+      // Duration计时器
+      durationTimer: null,
+      currentContentIndex: 0,
+      contentList: [],
+
       // 引导提示
       tips: [
         '1. 确保设备已连接到网络',
-        '2. 在设置中配置服务器地址',
+        '2. 应用将自动连接到服务器',
         '3. 等待设备激活后即可播放内容',
         '4. 使用遥控器进行操作'
       ]
@@ -134,59 +227,38 @@ export default {
     ]),
     ...mapGetters('device', [
       'getDeviceStatus',
-      'getNetworkStatus',
       'isDeviceOnline'
     ]),
     ...mapGetters('websocket', [
-      'getConnectionStatus'
+      'getConnectionStatus',
+      'getContentData'
     ]),
-    ...mapGetters('settings', [
-      'getDisplayConfig'
-    ]),
+
 
     // 应用版本
     appVersion() {
       return this.getAppVersion
     },
 
-    // 网络状态
+    // 网络状态（基于设备在线状态）
     networkStatusClass() {
-      const status = this.getNetworkStatus
+      const isOnline = this.isDeviceOnline
       return {
-        'status-connected': status.isConnected,
-        'status-disconnected': !status.isConnected
+        'status-connected': isOnline,
+        'status-disconnected': !isOnline
       }
     },
 
     networkIconName() {
-      const status = this.getNetworkStatus
-      if (!status.isConnected) return 'network'
-
-      switch (status.type) {
-        case 'wifi': return 'wifi'
-        case '4g':
-        case '5g': return 'cellular'
-        case 'ethernet': return 'ethernet'
-        default: return 'network'
-      }
+      return this.isDeviceOnline ? 'wifi' : 'network'
     },
 
     networkIconColor() {
-      const status = this.getNetworkStatus
-      return status.isConnected ? '#4CAF50' : '#F44336'
+      return this.isDeviceOnline ? '#4CAF50' : '#F44336'
     },
 
     networkStatusText() {
-      const status = this.getNetworkStatus
-      if (!status.isConnected) return '无网络'
-
-      const typeMap = {
-        'wifi': 'WiFi',
-        '4g': '4G',
-        '5g': '5G',
-        'ethernet': '以太网'
-      }
-      return typeMap[status.type] || status.type
+      return this.isDeviceOnline ? '网络已连接' : '无网络连接'
     },
 
     // WebSocket状态
@@ -256,7 +328,7 @@ export default {
 
     subStatusText() {
       if (!this.isDeviceOnline) return '请检查网络连接'
-      if (!this.getConnectionStatus.isConnected) return '请检查服务器配置'
+      if (!this.getConnectionStatus.isConnected) return '正在尝试连接服务器'
       if (!this.getConnectionStatus.isActive) return '等待管理员激活设备'
       return '可以接收和播放内容'
     },
@@ -283,24 +355,44 @@ export default {
       return this.getConnectionStatus.isConnected
     },
 
-    // 是否显示调试信息
-    showDebugInfo() {
-      return this.getDisplayConfig.showDebugInfo
+
+
+    // 当前要显示的内容
+    currentContent() {
+      const contentData = this.getContentData
+
+      if (!contentData || !contentData.success || !contentData.data) {
+        return null
+      }
+
+      const data = contentData.data
+
+      // 直接返回direct_content，最简单
+      if (data.direct_content && data.direct_content.content_url) {
+        return data.direct_content
+      }
+
+      // 如果没有direct_content，尝试primary_contents
+      if (data.primary_contents && data.primary_contents.length > 0) {
+        const content = data.primary_contents[0]
+        if (content.content_url) {
+          return content
+        }
+      }
+
+      return null
     },
 
-    // 调试数据
-    debugData() {
-      const deviceStatus = this.getDeviceStatus
-      const wsStatus = this.getConnectionStatus
 
-      return {
-        '设备状态': deviceStatus.status === 1 ? '在线' : '离线',
-        '网络类型': this.networkStatusText,
-        'WebSocket': this.websocketStatusText,
-        '注册状态': wsStatus.isRegistered ? '已注册' : '未注册',
-        '激活状态': wsStatus.isActive ? '已激活' : '未激活',
-        '重连次数': wsStatus.reconnectAttempts
-      }
+  },
+
+  watch: {
+    // 监听当前内容变化，确保旧内容被正确停止
+    currentContent: {
+      handler(newContent, oldContent) {
+        this.handleContentChange(newContent, oldContent)
+      },
+      immediate: false
     }
   },
 
@@ -316,14 +408,17 @@ export default {
         await this.initializeApp()
       }
 
-      // 自动连接WebSocket
-      await this.autoConnectWebSocket()
-
       // 开始时间更新
       this.startTimeUpdate()
 
       // 设置按键监听
       this.setupKeyListener()
+
+      // 设置事件监听
+      this.setupEventListeners()
+
+      // 自动连接WebSocket
+      await this.autoConnectWebSocket()
 
       this.isLoading = false
       logger.info('主页面初始化完成')
@@ -341,10 +436,15 @@ export default {
 
   onUnload() {
     this.stopTimeUpdate()
+    this.clearDurationTimer()
 
     // 清理按键监听器
     globalKeyHandler.removeAllListeners()
-    logger.info('页面卸载，已清理按键监听器')
+
+    // 清理事件监听器
+    this.cleanupEventListeners()
+
+    logger.info('页面卸载，已清理监听器')
   },
 
   methods: {
@@ -373,6 +473,95 @@ export default {
       }
     },
 
+    // 启动duration计时器
+    startDurationTimer(content) {
+      // 清除之前的计时器
+      this.clearDurationTimer()
+      
+      // 获取完整的播放列表内容
+      const contentData = this.getContentData
+      if (contentData && contentData.data) {
+        // 使用playlist_contents作为完整的内容列表，按content_sort排序
+        this.contentList = (contentData.data.playlist_contents || []).sort((a, b) => a.content_sort - b.content_sort)
+        
+        // 找到当前内容在完整列表中的索引
+        this.currentContentIndex = this.contentList.findIndex(item => 
+          item.id === content.id || item.content_url === content.content_url
+        )
+        
+        if (this.currentContentIndex === -1) {
+          this.currentContentIndex = 0
+        }
+      }
+      
+      // 如果duration > 0 且有多个内容，启动计时器
+      if (content.duration > 0 && this.contentList.length > 1) {
+        logger.info('启动自动切换计时器:', {
+          duration: content.duration,
+          contentCount: this.contentList.length,
+          currentIndex: this.currentContentIndex,
+          currentTitle: content.title
+        })
+        
+        this.durationTimer = setTimeout(() => {
+          this.switchToNextContent()
+        }, content.duration * 1000)
+      }
+    },
+
+    // 清除duration计时器
+    clearDurationTimer() {
+      if (this.durationTimer) {
+        clearTimeout(this.durationTimer)
+        this.durationTimer = null
+      }
+    },
+
+    // 切换到下一个内容
+    switchToNextContent() {
+      if (this.contentList.length <= 1) return
+      
+      // 计算下一个内容的索引（循环播放）
+      this.currentContentIndex = (this.currentContentIndex + 1) % this.contentList.length
+      const nextContent = this.contentList[this.currentContentIndex]
+      
+      if (nextContent) {
+        logger.info('自动切换到下一个内容:', {
+          from: this.currentContent?.title || '无',
+          to: nextContent.title || '无',
+          type: this.getContentTypeName(nextContent.content_type),
+          index: this.currentContentIndex,
+          totalCount: this.contentList.length
+        })
+        
+        // 重新构造内容响应，将下一个内容设为主要内容
+        const contentResponse = {
+          ...this.getContentData,
+          data: {
+            ...this.getContentData.data,
+            // 将选中的内容设为primary_contents的第一个
+            primary_contents: [nextContent],
+            // 保持原始播放列表不变
+            playlist_contents: this.contentList
+          }
+        }
+        
+        this.$store.commit('websocket/SET_CONTENT_DATA', contentResponse)
+      }
+    },
+
+    // 获取内容类型名称
+    getContentTypeName(contentType) {
+      const typeNames = {
+        [this.CONTENT_TYPES.IMAGE]: '图片',
+        [this.CONTENT_TYPES.VIDEO]: '视频',
+        [this.CONTENT_TYPES.LIVE_STREAM]: '直播',
+        [this.CONTENT_TYPES.WEBPAGE]: '网页',
+        [this.CONTENT_TYPES.AUDIO]: '音频'
+      }
+      return typeNames[contentType] || '未知'
+    },
+
     // 更新时间
     updateTime() {
       const now = new Date()
@@ -382,6 +571,33 @@ export default {
         minute: '2-digit',
         second: '2-digit'
       })
+    },
+
+    // 自动连接WebSocket
+    async autoConnectWebSocket() {
+      try {
+        logger.info('开始自动连接WebSocket')
+        this.loadingText = '正在连接服务器...'
+
+        // 尝试连接（使用配置文件中的默认地址和端口）
+        await this.connect()
+        logger.info('WebSocket自动连接成功')
+
+        // 连接成功后立即获取内容
+        setTimeout(async () => {
+          try {
+            await this.getContent()
+            logger.info('自动获取内容成功')
+          } catch (error) {
+            logger.warn('自动获取内容失败:', error)
+          }
+        }, 1000)
+
+      } catch (error) {
+        logger.warn('WebSocket自动连接失败:', error)
+        // 自动连接失败不显示错误提示，避免干扰用户体验
+        // 用户可以通过状态指示器看到连接状态
+      }
     },
 
     // 处理连接
@@ -399,79 +615,6 @@ export default {
 
       } catch (error) {
         logger.error('连接失败:', error)
-        uni.showToast({
-          title: '连接失败',
-          icon: 'error'
-        })
-      } finally {
-        this.isLoading = false
-      }
-    },
-
-    // 自动连接WebSocket
-    async autoConnectWebSocket() {
-      try {
-        logger.info('开始自动连接WebSocket')
-        this.loadingText = '正在连接服务器...'
-
-        // 检查网络状态
-        if (!this.isDeviceOnline) {
-          logger.warn('设备离线，跳过WebSocket连接')
-          return
-        }
-
-        // 连接WebSocket
-        await this.connect()
-
-        logger.info('WebSocket自动连接成功')
-
-        // 连接成功后，等待一下再尝试获取内容
-        setTimeout(async () => {
-          try {
-            const status = this.getConnectionStatus
-            if (status.isConnected && status.isRegistered && status.isActive) {
-              logger.info('设备已激活，自动获取内容')
-              await this.getContent()
-            } else {
-              logger.info('设备未激活或未注册，等待激活')
-            }
-          } catch (error) {
-            logger.warn('自动获取内容失败:', error)
-          }
-        }, 2000)
-
-      } catch (error) {
-        logger.error('WebSocket自动连接失败:', error)
-        // 自动连接失败不显示错误提示，避免干扰用户
-        // 用户可以手动点击连接按钮
-      }
-    },
-
-    // 处理手动连接
-    async handleConnect() {
-      try {
-        logger.info('用户手动连接WebSocket')
-        this.isLoading = true
-        this.loadingText = '正在连接服务器...'
-
-        await this.connect()
-
-        uni.showToast({
-          title: '连接成功',
-          icon: 'success'
-        })
-
-        // 连接成功后尝试获取内容
-        setTimeout(async () => {
-          try {
-            await this.getContent()
-          } catch (error) {
-            logger.warn('获取内容失败:', error)
-          }
-        }, 1000)
-
-      } catch (error) {
-        logger.error('手动连接失败:', error)
         uni.showToast({
           title: '连接失败',
           icon: 'error'
@@ -505,32 +648,200 @@ export default {
       }
     },
 
-    // 处理获取内容
-    async handleGetContent() {
-      try {
-        logger.info('用户点击获取内容按钮')
-        await this.getContent()
 
-        uni.showToast({
-          title: '正在获取内容',
-          icon: 'loading',
-          duration: 1500
+
+    // 处理内容变化 - 确保旧内容被正确停止
+    handleContentChange(newContent, oldContent) {
+      // 先清除之前的计时器
+      this.clearDurationTimer()
+      
+      // 只在真正有内容变化时打印日志
+      if (newContent !== oldContent) {
+        logger.info('内容切换:', {
+          from: oldContent?.title || '无',
+          to: newContent?.title || '无',
+          duration: newContent?.duration || 0
         })
-      } catch (error) {
-        logger.error('获取内容失败:', error)
-        uni.showToast({
-          title: '获取内容失败',
-          icon: 'error'
-        })
+      }
+
+      // 如果有旧内容，先停止它
+      if (oldContent) {
+        this.stopCurrentContent(oldContent)
+      }
+
+      // 如果有新内容，开始播放
+      if (newContent) {
+        this.startNewContent(newContent)
       }
     },
 
-    // 处理设置
-    handleSettings() {
-      this.changePage('settings')
-      uni.navigateTo({
-        url: '/pages/settings/settings'
+    // 停止当前播放的内容
+    stopCurrentContent(content) {
+      try {
+        // 根据内容类型停止播放
+        switch (content.content_type) {
+          case this.CONTENT_TYPES.VIDEO:
+          case this.CONTENT_TYPES.LIVE_STREAM:
+            this.stopVideoContent()
+            break
+          case this.CONTENT_TYPES.AUDIO:
+            this.stopAudioContent()
+            break
+          case this.CONTENT_TYPES.WEBPAGE:
+            this.stopWebContent()
+            break
+          case this.CONTENT_TYPES.IMAGE:
+            this.stopImageContent()
+            break
+          default:
+            logger.warn('未知内容类型，无法停止:', content.content_type)
+        }
+      } catch (error) {
+        logger.error('停止内容时出错:', error)
+      }
+    },
+
+    // 开始新内容
+    startNewContent(content) {
+      // 这里可以添加新内容开始前的准备工作
+      // 比如重置状态、清理缓存等
+      
+      // 启动duration计时器（如果需要自动切换）
+      this.startDurationTimer(content)
+    },
+
+    // 停止视频内容
+    stopVideoContent() {
+      try {
+        // 停止普通视频播放器
+        if (this.$refs.videoPlayer) {
+          this.$refs.videoPlayer.stop()
+          this.$refs.videoPlayer.cleanup()
+        }
+
+        // 停止直播流播放器
+        if (this.$refs.livePlayer) {
+          this.$refs.livePlayer.stop()
+          this.$refs.livePlayer.cleanup()
+        }
+
+        // 备用方案：查找所有视频播放器组件
+        this.findAndStopComponents('VideoPlayer', (player) => {
+          if (player.stop) player.stop()
+          if (player.cleanup) player.cleanup()
+        })
+      } catch (error) {
+        logger.error('停止视频播放器时出错:', error)
+      }
+    },
+
+    // 停止音频内容
+    stopAudioContent() {
+      try {
+        // 使用 ref 引用来停止音频播放器
+        if (this.$refs.audioPlayer) {
+          this.$refs.audioPlayer.stop()
+          this.$refs.audioPlayer.cleanup()
+        }
+
+        // 备用方案：查找所有音频播放器组件
+        this.findAndStopComponents('AudioPlayer', (player) => {
+          if (player.stop) player.stop()
+          if (player.cleanup) player.cleanup()
+        })
+      } catch (error) {
+        logger.error('停止音频播放器时出错:', error)
+      }
+    },
+
+    // 查找并停止指定类型的组件
+    findAndStopComponents(componentName, stopCallback) {
+      const findComponents = (children) => {
+        if (!children) return []
+
+        let components = []
+        children.forEach(child => {
+          if (child.$options.name === componentName) {
+            components.push(child)
+          }
+          // 递归查找子组件
+          if (child.$children && child.$children.length > 0) {
+            components = components.concat(findComponents(child.$children))
+          }
+        })
+        return components
+      }
+
+      const components = findComponents(this.$children)
+      components.forEach(component => {
+        try {
+          stopCallback(component)
+        } catch (error) {
+          logger.error(`停止${componentName}组件时出错:`, error)
+        }
       })
+    },
+
+    // 停止网页内容
+    stopWebContent() {
+      // 网页内容通常不需要特殊停止操作
+    },
+
+    // 停止图片内容
+    stopImageContent() {
+      // 图片内容通常不需要特殊停止操作
+    },
+
+    // 处理内容加载成功
+    handleContentLoad() {
+      // 内容加载成功，无需打印日志
+    },
+
+    // 处理内容加载错误
+    handleContentError(error) {
+      logger.error('内容加载失败:', error)
+
+      uni.showToast({
+        title: '内容加载失败',
+        icon: 'error'
+      })
+    },
+
+    // 处理视频播放结束
+    handleVideoEnded() {
+      // 视频播放结束后，如果是单个内容或duration为0，不需要特殊处理
+      // 自动切换由duration计时器管理
+    },
+
+    // 处理音频播放结束
+    handleAudioEnded() {
+      // 音频播放结束后，如果是单个内容或duration为0，不需要特殊处理
+      // 自动切换由duration计时器管理
+    },
+
+    // 处理播放器重试失败
+    handleRetryFailed() {
+      logger.error('播放器重试失败，尝试刷新内容')
+
+      uni.showToast({
+        title: '播放失败，正在重新获取内容',
+        icon: 'error',
+        duration: 2000
+      })
+
+      // 3秒后自动刷新内容
+      setTimeout(async () => {
+        try {
+          await this.handleRefresh()
+          logger.info('因播放器重试失败而刷新内容完成')
+        } catch (error) {
+          logger.error('刷新内容失败:', error)
+          uni.showToast({
+            title: '刷新内容失败',
+            icon: 'error'
+          })
+        }
+      }, 3000)
     },
 
     // 设置按键监听
@@ -540,14 +851,10 @@ export default {
         this.handleBack()
       })
 
-      globalKeyHandler.addListener(KEYS.MENU, () => {
-        this.handleSettings()
-      })
+
 
       globalKeyHandler.addListener(KEYS.CENTER, () => {
-        if (!this.isConnected) {
-          this.handleConnect()
-        } else {
+        if (this.isConnected) {
           this.handleRefresh()
         }
       })
@@ -599,6 +906,35 @@ export default {
       })
 
       logger.info('按键监听器已设置')
+    },
+
+    // 设置事件监听器
+    setupEventListeners() {
+      // 监听停止所有播放器的事件
+      uni.$on('stopAllPlayers', this.handleStopAllPlayers)
+      logger.info('事件监听器已设置')
+    },
+
+    // 清理事件监听器
+    cleanupEventListeners() {
+      uni.$off('stopAllPlayers', this.handleStopAllPlayers)
+      logger.info('事件监听器已清理')
+    },
+
+    // 处理停止所有播放器事件
+    handleStopAllPlayers() {
+      try {
+        // 停止所有类型的内容
+        this.stopVideoContent()
+        this.stopAudioContent()
+        this.stopWebContent()
+        this.stopImageContent()
+        
+        // 清除duration计时器
+        this.clearDurationTimer()
+      } catch (error) {
+        logger.error('停止播放器时出错:', error)
+      }
     },
 
     // 按键处理方法
@@ -1061,5 +1397,152 @@ export default {
   .action-btn {
     width: 200rpx;
   }
+}
+
+/* 内容显示样式 */
+.content-display {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+}
+
+/* 网页内容 */
+.content-webview {
+  width: 100%;
+  height: 100%;
+}
+
+/* 图片内容 */
+.content-image {
+  width: 100%;
+  height: 100%;
+}
+
+/* 视频内容 */
+.content-video {
+  width: 100%;
+  height: 100%;
+}
+
+/* 音频内容 */
+.content-audio {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+}
+
+.audio-player-ui {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 600rpx;
+}
+
+.audio-cover {
+  width: 300rpx;
+  height: 300rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  margin-bottom: 40rpx;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-thumbnail {
+  width: 100%;
+  height: 100%;
+}
+
+.audio-default-cover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.audio-info {
+  width: 100%;
+}
+
+.audio-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 20rpx;
+  display: block;
+}
+
+.audio-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.audio-status {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* 未知内容类型 */
+.content-unknown {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+}
+
+.unknown-content-info {
+  text-align: center;
+  max-width: 600rpx;
+  padding: 40rpx;
+}
+
+.unknown-content-text {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #FF9800;
+  margin: 20rpx 0;
+  display: block;
+}
+
+.unknown-content-url {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.7);
+  word-break: break-all;
+  display: block;
+}
+
+.content-title-overlay {
+  position: absolute;
+  bottom: 40rpx;
+  left: 40rpx;
+  right: 40rpx;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 20rpx 30rpx;
+  border-radius: 10rpx;
+}
+
+.content-title-text {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 500;
+  text-align: center;
 }
 </style>

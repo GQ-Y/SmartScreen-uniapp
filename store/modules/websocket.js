@@ -407,14 +407,18 @@ const actions = {
           break
           
         case MESSAGE_TYPES.DISPLAY_MODE_CHANGE:
-          // 转发给播放器模块处理
-          dispatch('player/handleDisplayModeChange', message, { root: true })
+          // 处理播放策略变更
+          dispatch('handleDisplayModeChange', message)
           break
           
         case MESSAGE_TYPES.BATCH_CONTROL:
+          // 处理批量控制指令
+          dispatch('handleBatchControl', message)
+          break
+          
         case MESSAGE_TYPES.REFRESH:
-          // 转发给播放器模块处理
-          dispatch('player/handleControl', message, { root: true })
+          // 处理刷新指令
+          dispatch('handleRefresh', message)
           break
           
         case MESSAGE_TYPES.ERROR:
@@ -512,33 +516,209 @@ const actions = {
 
   // 处理批量控制
   async handleBatchControl({ dispatch }, message) {
+    logger.info('处理批量控制指令:', message)
 
-    switch (message.action) {
-      case 'refresh':
-        logger.info('执行刷新操作')
-        await dispatch('getContent')
-        break
-      case 'restart':
-        logger.info('执行重启操作')
-        uni.showModal({
-          title: '系统通知',
-          content: message.message || '系统将重启',
-          showCancel: false,
-          success: () => {
-            location.reload()
+    try {
+      switch (message.action) {
+        case 'refresh':
+          logger.info('执行刷新操作')
+          
+          // 显示刷新提示
+          if (message.message) {
+            uni.showToast({
+              title: message.message,
+              icon: 'none',
+              duration: 2000
+            })
           }
+          
+          // 先停止当前播放的内容
+          dispatch('stopCurrentContent')
+          
+          // 延迟后重新获取内容
+          setTimeout(async () => {
+            try {
+              await dispatch('getContent')
+              uni.showToast({
+                title: '内容已刷新',
+                icon: 'success',
+                duration: 1500
+              })
+            } catch (error) {
+              logger.error('批量刷新失败:', error)
+              uni.showToast({
+                title: '刷新失败',
+                icon: 'error',
+                duration: 2000
+              })
+            }
+          }, 500)
+          break
+          
+        case 'restart':
+          logger.info('执行重启操作（APP端执行刷新）')
+          
+          // 显示简单的Toast提示（如果有消息）
+          if (message.message) {
+            uni.showToast({
+              title: message.message,
+              icon: 'none',
+              duration: 2000
+            })
+          }
+          
+          // APP无法真正重启设备，直接执行刷新操作
+          dispatch('stopCurrentContent')
+          
+          setTimeout(async () => {
+            try {
+              await dispatch('getContent')
+              uni.showToast({
+                title: '内容已刷新',
+                icon: 'success',
+                duration: 1500
+              })
+            } catch (error) {
+              logger.error('重启刷新失败:', error)
+              uni.showToast({
+                title: '刷新失败',
+                icon: 'error',
+                duration: 2000
+              })
+            }
+          }, 1000)
+          break
+          
+        case 'shutdown':
+          logger.info('执行关闭操作')
+          uni.showModal({
+            title: '系统通知',
+            content: message.message || '收到关闭指令',
+            showCancel: false,
+            success: () => {
+              // 停止所有播放内容
+              dispatch('stopCurrentContent')
+              
+              // 可选：断开WebSocket连接
+              // dispatch('disconnect')
+              
+              logger.info('设备已响应关闭指令')
+            }
+          })
+          break
+          
+        case 'activate':
+          logger.info('执行激活操作')
+          uni.showToast({
+            title: message.message || '设备已激活',
+            icon: 'success',
+            duration: 2000
+          })
+          
+          // 激活后重新获取内容
+          setTimeout(async () => {
+            await dispatch('getContent')
+          }, 1000)
+          break
+          
+        case 'deactivate':
+          logger.info('执行禁用操作')
+          uni.showToast({
+            title: message.message || '设备已禁用',
+            icon: 'none',
+            duration: 2000
+          })
+          
+          // 禁用后停止播放
+          dispatch('stopCurrentContent')
+          break
+          
+        default:
+          logger.warn('未知的批量控制操作:', message.action)
+          uni.showToast({
+            title: '未知的控制指令',
+            icon: 'none',
+            duration: 2000
+          })
+      }
+    } catch (error) {
+      logger.error('处理批量控制指令失败:', error)
+      uni.showToast({
+        title: '指令执行失败',
+        icon: 'error',
+        duration: 2000
+      })
+    }
+  },
+
+  // 处理播放策略变更
+  async handleDisplayModeChange({ dispatch }, message) {
+    logger.info('处理播放策略变更:', message)
+    
+    try {
+      // 先停止当前播放的内容
+      dispatch('stopCurrentContent')
+      
+      // 播放策略变更后，重新获取内容
+      await dispatch('getContent')
+      
+      logger.info('播放策略变更处理完成:', {
+        newMode: message.mode,
+        newModeName: message.mode_name
+      })
+      
+    } catch (error) {
+      logger.error('处理播放策略变更失败:', error)
+    }
+  },
+
+  // 处理刷新指令
+  async handleRefresh({ dispatch }, message) {
+    logger.info('处理刷新指令:', message)
+    
+    try {
+      // 显示刷新提示
+      if (message.message) {
+        uni.showToast({
+          title: message.message,
+          icon: 'none',
+          duration: 2000
         })
-        break
-      case 'shutdown':
-        logger.info('执行关闭操作')
-        uni.showModal({
-          title: '系统通知',
-          content: message.message || '系统将关闭',
-          showCancel: false
-        })
-        break
-      default:
-        logger.warn('未知的批量控制操作:', message.action)
+      }
+      
+      // 先停止当前播放的内容
+      dispatch('stopCurrentContent')
+      
+      // 延迟一下再获取内容，确保停止操作完成
+      setTimeout(async () => {
+        try {
+          // 重新获取内容
+          await dispatch('getContent')
+          logger.info('刷新指令处理完成')
+          
+          // 显示刷新成功提示
+          uni.showToast({
+            title: '内容已刷新',
+            icon: 'success',
+            duration: 1500
+          })
+        } catch (error) {
+          logger.error('刷新内容失败:', error)
+          uni.showToast({
+            title: '刷新失败',
+            icon: 'error',
+            duration: 2000
+          })
+        }
+      }, 500)
+      
+    } catch (error) {
+      logger.error('处理刷新指令失败:', error)
+      uni.showToast({
+        title: '刷新失败',
+        icon: 'error',
+        duration: 2000
+      })
     }
   },
 

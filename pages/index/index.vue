@@ -82,6 +82,7 @@
           :show-progress="true"
           :cover-image="currentContent.thumbnail"
           :background-image="currentContent.thumbnail"
+          :muted="true"
           @play="handleContentLoad"
           @error="handleContentError"
           @ended="handleAudioEnded"
@@ -143,6 +144,15 @@ export default {
       durationTimer: null,
       currentContentIndex: 0,
       contentList: [],
+
+      // 临时播放相关状态
+      tempPlaybackState: {
+        isTemporaryPlaying: false,
+        originalContent: null,
+        originalContentList: [],
+        originalContentIndex: 0,
+        tempTimer: null
+      },
 
       // 设备信息
       deviceInfo: {
@@ -451,6 +461,7 @@ export default {
   onUnload() {
     this.stopTimeUpdate()
     this.clearDurationTimer()
+    this.clearTemporaryTimer()
 
     // 清理按键监听器
     globalKeyHandler.removeAllListeners()
@@ -774,6 +785,183 @@ export default {
       return typeNames[contentType] || '未知'
     },
 
+    // 检查是否为临时播放内容
+    isTemporaryContent(content) {
+      if (!content) return false
+      
+      // 检查是否来自临时内容推送消息
+      const contentData = this.getContentData
+      if (contentData && contentData.data) {
+        const { display_mode_name } = contentData.data
+        
+        // 如果是临时内容推送（temp_content）或推送内容（push_content）且有duration，则认为是临时播放
+        if ((display_mode_name === '临时内容' || display_mode_name === '推送内容') && content.duration > 0) {
+          return true
+        }
+        
+        // 如果内容本身标记为临时内容
+        if (content.is_temp === true) {
+          return true
+        }
+      }
+      
+      return false
+    },
+
+    // 开始临时播放
+    startTemporaryPlayback(content) {
+      logger.info('开始临时播放:', {
+        title: content.title,
+        type: this.getContentTypeName(content.content_type),
+        duration: content.duration,
+        url: content.content_url
+      })
+
+      // 如果当前不在临时播放状态，保存原有状态
+      if (!this.tempPlaybackState.isTemporaryPlaying) {
+        this.saveOriginalState()
+      }
+
+      // 设置临时播放状态
+      this.tempPlaybackState.isTemporaryPlaying = true
+
+      // 启动临时播放计时器
+      this.startTemporaryTimer(content)
+    },
+
+    // 保存原有播放状态
+    saveOriginalState() {
+      const currentContent = this.currentContent
+      const contentData = this.getContentData
+
+      this.tempPlaybackState.originalContent = currentContent
+      this.tempPlaybackState.originalContentIndex = this.currentContentIndex
+      
+      // 保存原有的内容列表
+      if (contentData && contentData.data) {
+        this.tempPlaybackState.originalContentList = [...(contentData.data.playlist_contents || [])]
+      }
+
+      logger.info('保存原有播放状态:', {
+        originalTitle: currentContent?.title || '无',
+        originalIndex: this.currentContentIndex,
+        originalListLength: this.tempPlaybackState.originalContentList.length
+      })
+    },
+
+    // 启动临时播放计时器
+    startTemporaryTimer(content) {
+      // 清除之前的临时计时器
+      this.clearTemporaryTimer()
+
+      if (content.duration > 0) {
+        logger.info('启动临时播放计时器:', {
+          duration: content.duration,
+          title: content.title,
+          endTime: new Date(Date.now() + content.duration * 1000).toLocaleTimeString()
+        })
+
+        this.tempPlaybackState.tempTimer = setTimeout(() => {
+          this.endTemporaryPlayback()
+        }, content.duration * 1000)
+      }
+    },
+
+    // 清除临时播放计时器
+    clearTemporaryTimer() {
+      if (this.tempPlaybackState.tempTimer) {
+        clearTimeout(this.tempPlaybackState.tempTimer)
+        this.tempPlaybackState.tempTimer = null
+      }
+    },
+
+    // 结束临时播放，恢复原有内容
+    endTemporaryPlayback() {
+      logger.info('临时播放结束，恢复原有内容')
+
+      // 清除临时计时器
+      this.clearTemporaryTimer()
+
+      // 恢复原有播放状态
+      this.restoreOriginalState()
+
+      // 重置临时播放状态
+      this.tempPlaybackState.isTemporaryPlaying = false
+      this.tempPlaybackState.originalContent = null
+      this.tempPlaybackState.originalContentList = []
+      this.tempPlaybackState.originalContentIndex = 0
+    },
+
+    // 恢复原有播放状态
+    restoreOriginalState() {
+      const originalContent = this.tempPlaybackState.originalContent
+      const originalContentList = this.tempPlaybackState.originalContentList
+      const originalContentIndex = this.tempPlaybackState.originalContentIndex
+
+      logger.info('恢复原有播放状态:', {
+        originalTitle: originalContent?.title || '无',
+        originalIndex: originalContentIndex,
+        originalListLength: originalContentList.length
+      })
+
+      // 如果有原有内容，恢复它
+      if (originalContent && originalContentList.length > 0) {
+        // 重新构造内容响应，恢复原有内容
+        const contentResponse = {
+          type: 'content_response',
+          success: true,
+          msg: '恢复原有内容',
+          data: {
+            device_id: null,
+            display_mode: 1, // 播放列表优先
+            display_mode_name: '恢复播放',
+            direct_content: null,
+            playlist_contents: originalContentList,
+            has_direct_content: false,
+            has_playlist_contents: true,
+            primary_contents: [originalContent],
+            secondary_contents: [],
+            total_contents: originalContentList.length
+          }
+        }
+
+        // 恢复内容索引
+        this.currentContentIndex = originalContentIndex
+        this.contentList = originalContentList
+
+        // 更新内容数据
+        this.$store.commit('websocket/SET_CONTENT_DATA', contentResponse)
+      } else {
+        // 如果没有原有内容，主动获取当前设备的播放内容
+        logger.info('没有原有内容，主动获取当前播放内容')
+        this.getContentAfterTempPlayback()
+      }
+    },
+
+    // 临时播放结束后获取内容
+    async getContentAfterTempPlayback() {
+      try {
+        logger.info('临时播放结束，正在获取当前设备播放内容...')
+        
+        // 调用WebSocket获取内容
+        await this.getContent()
+        
+        logger.info('临时播放结束后获取内容成功')
+      } catch (error) {
+        logger.error('临时播放结束后获取内容失败:', error)
+        
+        // 如果获取失败，清空当前内容
+        this.$store.commit('websocket/CLEAR_CONTENT_DATA')
+        
+        // 可选：显示错误提示
+        uni.showToast({
+          title: '获取内容失败',
+          icon: 'error',
+          duration: 2000
+        })
+      }
+    },
+
     // 更新时间
     updateTime() {
       const now = new Date()
@@ -883,7 +1071,8 @@ export default {
           toId: newId,
           toTitle: newContent?.title || '无',
           toType: newContent ? this.getContentTypeName(newContent.content_type) : '无',
-          duration: newContent?.duration || 0
+          duration: newContent?.duration || 0,
+          isTemporary: this.isTemporaryContent(newContent)
         })
 
         // 如果有旧内容，先停止它
@@ -926,11 +1115,16 @@ export default {
 
     // 开始新内容
     startNewContent(content) {
-      // 这里可以添加新内容开始前的准备工作
-      // 比如重置状态、清理缓存等
-      
-      // 启动duration计时器（如果需要自动切换）
-      this.startDurationTimer(content)
+      // 检查是否为临时播放内容
+      if (this.isTemporaryContent(content)) {
+        this.startTemporaryPlayback(content)
+      } else {
+        // 这里可以添加新内容开始前的准备工作
+        // 比如重置状态、清理缓存等
+        
+        // 启动duration计时器（如果需要自动切换）
+        this.startDurationTimer(content)
+      }
     },
 
     // 停止视频内容
@@ -1032,12 +1226,30 @@ export default {
 
     // 处理视频播放结束
     handleVideoEnded() {
+      logger.info('视频播放结束')
+      
+      // 如果是临时播放，结束临时播放并恢复原有内容
+      if (this.tempPlaybackState.isTemporaryPlaying) {
+        logger.info('临时视频播放结束，恢复原有内容')
+        this.endTemporaryPlayback()
+        return
+      }
+      
       // 视频播放结束后，如果是单个内容或duration为0，不需要特殊处理
       // 自动切换由duration计时器管理
     },
 
     // 处理音频播放结束
     handleAudioEnded() {
+      logger.info('音频播放结束')
+      
+      // 如果是临时播放，结束临时播放并恢复原有内容
+      if (this.tempPlaybackState.isTemporaryPlaying) {
+        logger.info('临时音频播放结束，恢复原有内容')
+        this.endTemporaryPlayback()
+        return
+      }
+      
       // 音频播放结束后，如果是单个内容或duration为0，不需要特殊处理
       // 自动切换由duration计时器管理
     },

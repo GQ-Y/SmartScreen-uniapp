@@ -1,39 +1,5 @@
 <template>
   <view class="smart-screen-container">
-    <!-- 顶部状态栏 -->
-    <view class="top-bar" style="display: none;">
-      <!-- 左上角Logo -->
-      <view class="logo-section">
-        <image class="logo" src="/static/logo.png" mode="aspectFit"></image>
-        <text class="app-name">SmartScreen</text>
-      </view>
-
-      <!-- 右上角状态区域 -->
-      <view class="status-section">
-        <!-- 网络状态 -->
-        <view class="status-indicator" :class="networkStatusClass">
-          <view class="status-icon-wrapper">
-            <SvgIcon :name="networkIconName" :color="networkIconColor" :size="18" />
-          </view>
-          <text class="status-label">{{ networkStatusText }}</text>
-        </view>
-
-        <!-- WebSocket连接状态 -->
-        <view class="status-indicator" :class="websocketStatusClass">
-          <view class="status-icon-wrapper">
-            <SvgIcon :name="websocketIconName" :color="websocketIconColor" :size="18" />
-          </view>
-          <text class="status-label">{{ websocketStatusText }}</text>
-        </view>
-
-        <!-- 时间显示 -->
-        <view class="time-display">
-          <SvgIcon name="time" :color="'rgba(255,255,255,0.8)'" :size="16" />
-          <text class="time-text">{{ currentTime }}</text>
-        </view>
-      </view>
-    </view>
-
     <!-- 主内容区域 -->
     <view class="main-content">
       <!-- 直接显示内容 -->
@@ -124,56 +90,19 @@
 
         <!-- 未知类型内容 -->
         <view v-else class="content-unknown">
-          <view class="unknown-content-info">
-            <SvgIcon name="warning" :color="'#FF9800'" :size="60" />
-            <text class="unknown-content-text">不支持的内容类型: {{ currentContent.content_type }}</text>
-            <text class="unknown-content-url">{{ currentContent.content_url }}</text>
-          </view>
-        </view>
-
-        <!-- 内容标题覆盖层 -->
-        <view class="content-title-overlay" v-if="currentContent.title && currentContent.content_type !== CONTENT_TYPES.AUDIO">
-          <text class="content-title-text">{{ currentContent.title }}</text>
+          <text class="unknown-content-text">不支持的内容类型</text>
         </view>
       </view>
 
       <!-- 中央状态显示（当没有内容时显示） -->
       <view v-else class="center-status">
-        <view class="status-icon-large" :class="mainStatusClass">
-          <SvgIcon :name="mainStatusIconName" :color="mainStatusIconColor" :size="80" />
-        </view>
-
-        <view class="status-text-area">
-          <text class="main-status-text">{{ mainStatusText }}</text>
-          <text class="sub-status-text">{{ subStatusText }}</text>
-        </view>
-
-        <!-- 引导提示 -->
-        <view class="guide-tips" v-if="showGuideTips">
-          <text class="guide-text">{{ guideText }}</text>
-          <view class="tips-list">
-            <text class="tip-item" v-for="(tip, index) in tips" :key="index">{{ tip }}</text>
-          </view>
-        </view>
-
-       
+        <text class="main-status-text">{{ mainStatusText }}</text>
       </view>
-
-
-    </view>
-
-    <!-- 底部版权信息 -->
-    <view class="footer" style="display: none;">
-      <text class="copyright">© 2024 SmartScreen Team. All rights reserved.</text>
-      <text class="version">版本 {{ appVersion }}</text>
     </view>
 
     <!-- 加载遮罩 -->
     <view class="loading-overlay" v-if="isLoading">
-      <view class="loading-content">
-        <text class="loading-icon">⟳</text>
-        <text class="loading-text">{{ loadingText }}</text>
-      </view>
+      <text class="loading-text">{{ loadingText }}</text>
     </view>
   </view>
 </template>
@@ -440,12 +369,12 @@ export default {
         iconScale = 1.2
       }
 
-      // TV端特殊处理 - 考虑观看距离，需要更大的字体和间距
+      // TV端特殊处理 - 适当调整字体和间距
       if (isTV) {
-        fontScale *= 1.3 // TV端字体放大30%
-        spacingScale *= 1.2 // TV端间距放大20%
-        iconScale *= 1.3 // TV端图标放大30%
-        baseUnit *= 1.3 // 整体放大30%
+        fontScale *= 0.8 // TV端字体缩小20%
+        spacingScale *= 1.0 // TV端间距保持不变
+        iconScale *= 1.0 // TV端图标保持不变
+        baseUnit *= 0.9 // 整体缩小10%
       }
       
       // 高DPI屏幕调整
@@ -1395,19 +1324,6 @@ export default {
 </script>
 
 <style scoped>
-/* CSS变量定义 */
-:root {
-  --base-unit: 1;
-  --screen-width: 1920px;
-  --screen-height: 1080px;
-  --pixel-ratio: 1;
-  --is-tv: 1;
-  --font-scale: 1;
-  --spacing-scale: 1;
-  --icon-scale: 1;
-  --screen-size: 'large';
-}
-
 .smart-screen-container {
   width: 100vw;
   height: 100vh;
@@ -1416,105 +1332,7 @@ export default {
   flex-direction: column;
   color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* 使用CSS变量进行动态缩放 */
-  font-size: calc(14px * var(--font-scale));
   overflow: hidden;
-}
-
-/* 顶部状态栏 */
-.top-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: calc(40rpx * var(--spacing-scale)) calc(60rpx * var(--spacing-scale));
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  min-height: calc(80rpx * var(--spacing-scale));
-}
-
-.logo-section {
-  display: flex;
-  align-items: center;
-  gap: calc(20rpx * var(--spacing-scale));
-}
-
-.logo {
-  width: calc(80rpx * var(--icon-scale));
-  height: calc(80rpx * var(--icon-scale));
-}
-
-.app-name {
-  font-size: calc(36rpx * var(--font-scale));
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.status-section {
-  display: flex;
-  align-items: center;
-  gap: calc(20rpx * var(--spacing-scale));
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: calc(8rpx * var(--spacing-scale));
-  padding: calc(8rpx * var(--spacing-scale)) calc(16rpx * var(--spacing-scale));
-  border-radius: calc(16rpx * var(--spacing-scale));
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  transition: all 0.3s ease;
-  min-width: calc(80rpx * var(--spacing-scale));
-}
-
-.status-indicator.status-connected {
-  background: rgba(76, 175, 80, 0.15);
-  border-color: rgba(76, 175, 80, 0.3);
-}
-
-.status-indicator.status-disconnected {
-  background: rgba(244, 67, 54, 0.15);
-  border-color: rgba(244, 67, 54, 0.3);
-}
-
-.status-indicator.status-connecting {
-  background: rgba(255, 193, 7, 0.15);
-  border-color: rgba(255, 193, 7, 0.3);
-}
-
-.status-icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(24rpx * var(--icon-scale));
-  height: calc(24rpx * var(--icon-scale));
-}
-
-.status-label {
-  font-size: calc(22rpx * var(--font-scale));
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  white-space: nowrap;
-}
-
-.time-display {
-  display: flex;
-  align-items: center;
-  gap: calc(8rpx * var(--spacing-scale));
-  padding: calc(8rpx * var(--spacing-scale)) calc(16rpx * var(--spacing-scale));
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: calc(16rpx * var(--spacing-scale));
-}
-
-.time-text {
-  font-size: calc(24rpx * var(--font-scale));
-  font-weight: 600;
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-  color: rgba(255, 255, 255, 0.9);
 }
 
 /* 主内容区域 */
@@ -1524,231 +1342,23 @@ export default {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: calc(60rpx * var(--spacing-scale));
   position: relative;
-  min-height: 0; /* 防止flex子元素溢出 */
+  min-height: 0;
 }
 
+/* 中央状态显示 */
 .center-status {
   text-align: center;
-  max-width: calc(800rpx * var(--spacing-scale));
   width: 100%;
-}
-
-.status-icon-large {
-  width: calc(200rpx * var(--icon-scale));
-  height: calc(200rpx * var(--icon-scale));
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto calc(40rpx * var(--spacing-scale));
-  transition: all 0.3s ease;
-}
-
-.status-icon-large.status-active {
-  background: rgba(76, 175, 80, 0.2);
-  border: 3px solid rgba(76, 175, 80, 0.5);
-  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(76, 175, 80, 0.3);
-}
-
-.status-icon-large.status-inactive {
-  background: rgba(255, 193, 7, 0.2);
-  border: 3px solid rgba(255, 193, 7, 0.5);
-  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(255, 193, 7, 0.3);
-}
-
-.status-icon-large.status-disconnected {
-  background: rgba(244, 67, 54, 0.2);
-  border: 3px solid rgba(244, 67, 54, 0.5);
-  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(244, 67, 54, 0.3);
-}
-
-.status-icon-large.status-offline {
-  background: rgba(158, 158, 158, 0.2);
-  border: 3px solid rgba(158, 158, 158, 0.5);
-  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(158, 158, 158, 0.3);
-}
-
-.status-text-area {
-  margin-bottom: calc(60rpx * var(--spacing-scale));
+  padding: 60px;
 }
 
 .main-status-text {
-  font-size: calc(48rpx * var(--font-scale));
+  font-size: 36px;
   font-weight: 600;
-  margin-bottom: calc(20rpx * var(--spacing-scale));
-  display: block;
   line-height: 1.2;
-}
-
-.sub-status-text {
-  font-size: calc(28rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.8);
-  display: block;
-  line-height: 1.4;
-}
-
-/* 引导提示 */
-.guide-tips {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: calc(20rpx * var(--spacing-scale));
-  padding: calc(40rpx * var(--spacing-scale));
-  margin-bottom: calc(60rpx * var(--spacing-scale));
-  backdrop-filter: blur(10px);
-  width: 100%;
-  max-width: calc(600rpx * var(--spacing-scale));
-}
-
-.guide-text {
-  font-size: calc(32rpx * var(--font-scale));
-  font-weight: 600;
-  margin-bottom: calc(30rpx * var(--spacing-scale));
-  display: block;
-}
-
-.tips-list {
-  text-align: left;
-}
-
-.tip-item {
-  display: block;
-  font-size: calc(26rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: calc(15rpx * var(--spacing-scale));
-  line-height: 1.5;
-}
-
-/* 操作按钮 */
-.action-buttons {
-  display: flex;
-  gap: calc(30rpx * var(--spacing-scale));
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.action-btn {
-  padding: calc(20rpx * var(--spacing-scale)) calc(40rpx * var(--spacing-scale));
-  border-radius: calc(25rpx * var(--spacing-scale));
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: calc(28rpx * var(--font-scale));
-  font-weight: 500;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-  min-width: calc(120rpx * var(--spacing-scale));
-  cursor: pointer;
-}
-
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-2rpx);
-}
-
-.action-btn.primary {
-  background: rgba(33, 150, 243, 0.8);
-  border-color: rgba(33, 150, 243, 1);
-}
-
-.action-btn.primary:hover {
-  background: rgba(33, 150, 243, 1);
-}
-
-/* 调试信息 */
-.debug-info {
-  position: absolute;
-  bottom: 20rpx;
-  left: 20rpx;
-  background: rgba(0, 0, 0, 0.8);
-  border-radius: 10rpx;
-  padding: 20rpx;
-  max-width: 400rpx;
-  font-size: 20rpx;
-}
-
-.debug-title {
-  font-weight: 600;
-  margin-bottom: 10rpx;
-  display: block;
-  color: #4CAF50;
-}
-
-.debug-item {
-  display: flex;
-  margin-bottom: 5rpx;
-}
-
-.debug-key {
-  color: #FFC107;
-  margin-right: 10rpx;
-  min-width: 120rpx;
-}
-
-.debug-value {
-  color: #ffffff;
-}
-
-/* 底部版权信息 */
-.footer {
-  text-align: center;
-  padding: calc(30rpx * var(--spacing-scale));
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.copyright {
-  font-size: calc(24rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.7);
-  display: block;
-  margin-bottom: calc(10rpx * var(--spacing-scale));
-}
-
-.version {
-  font-size: calc(20rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.5);
-  display: block;
-}
-
-/* 加载遮罩 */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.loading-content {
-  text-align: center;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: calc(20rpx * var(--spacing-scale));
-  padding: calc(60rpx * var(--spacing-scale));
-  backdrop-filter: blur(10px);
-}
-
-.loading-icon {
-  font-size: calc(60rpx * var(--font-scale));
-  display: block;
-  margin-bottom: calc(20rpx * var(--spacing-scale));
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  font-size: calc(28rpx * var(--font-scale));
-  color: #ffffff;
-  display: block;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  margin: 0;
 }
 
 /* 内容显示样式 */
@@ -1778,93 +1388,8 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
   max-width: 100%;
   max-height: 100%;
-}
-
-/* 视频内容 */
-.content-video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-/* 音频内容 */
-.content-audio {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-}
-
-.audio-player-ui {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  max-width: calc(600rpx * var(--spacing-scale));
-  padding: calc(40rpx * var(--spacing-scale));
-}
-
-.audio-cover {
-  width: calc(300rpx * var(--icon-scale));
-  height: calc(300rpx * var(--icon-scale));
-  border-radius: calc(20rpx * var(--spacing-scale));
-  overflow: hidden;
-  margin-bottom: calc(40rpx * var(--spacing-scale));
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 calc(20rpx * var(--spacing-scale)) calc(40rpx * var(--spacing-scale)) rgba(0, 0, 0, 0.3);
-}
-
-.audio-thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
-.audio-default-cover {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.audio-info {
-  width: 100%;
-  margin-bottom: calc(30rpx * var(--spacing-scale));
-}
-
-.audio-title {
-  font-size: calc(36rpx * var(--font-scale));
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: calc(20rpx * var(--spacing-scale));
-  display: block;
-  line-height: 1.3;
-  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
-}
-
-.audio-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: calc(12rpx * var(--spacing-scale));
-}
-
-.audio-status {
-  font-size: calc(28rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.8);
 }
 
 /* 未知内容类型 */
@@ -1877,401 +1402,86 @@ export default {
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
 }
 
-.unknown-content-info {
-  text-align: center;
-  max-width: calc(600rpx * var(--spacing-scale));
-  padding: calc(40rpx * var(--spacing-scale));
-}
-
 .unknown-content-text {
-  font-size: calc(32rpx * var(--font-scale));
+  font-size: 32px;
   font-weight: 600;
   color: #FF9800;
-  margin: calc(20rpx * var(--spacing-scale)) 0;
-  display: block;
-  line-height: 1.3;
-}
-
-.unknown-content-url {
-  font-size: calc(24rpx * var(--font-scale));
-  color: rgba(255, 255, 255, 0.7);
-  word-break: break-all;
-  display: block;
-  line-height: 1.4;
-}
-
-.content-title-overlay {
-  position: absolute;
-  bottom: calc(40rpx * var(--spacing-scale));
-  left: calc(40rpx * var(--spacing-scale));
-  right: calc(40rpx * var(--spacing-scale));
-  background-color: rgba(0, 0, 0, 0.7);
-  padding: calc(20rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
-  border-radius: calc(10rpx * var(--spacing-scale));
-  backdrop-filter: blur(5px);
-}
-
-.content-title-text {
-  color: #fff;
-  font-size: calc(32rpx * var(--font-scale));
-  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   text-align: center;
-  line-height: 1.3;
 }
 
-/* 特定分辨率适配 */
-/* 8K及以上 (7680x4320+) */
-@media screen and (min-width: 7680px) {
-  .smart-screen-container {
-    font-size: calc(16px * 4);
-  }
-  
-  .main-content {
-    padding: calc(120rpx * var(--spacing-scale));
-  }
-  
-  .center-status {
-    max-width: calc(1200rpx * var(--spacing-scale));
-  }
+/* 加载遮罩 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
 }
 
-/* 4K及以上 (3840x2160+) */
-@media screen and (min-width: 3840px) and (max-width: 7679px) {
-  .smart-screen-container {
-    font-size: calc(16px * 2.5);
-  }
-  
-  .main-content {
-    padding: calc(100rpx * var(--spacing-scale));
-  }
-  
-  .center-status {
-    max-width: calc(1000rpx * var(--spacing-scale));
-  }
-  
-  .status-icon-large {
-    width: calc(250rpx * var(--icon-scale));
-    height: calc(250rpx * var(--icon-scale));
-  }
+.loading-text {
+  font-size: 32px;
+  color: #ffffff;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  text-align: center;
 }
 
-/* 2K (2560x1440+) */
-@media screen and (min-width: 2560px) and (max-width: 3839px) {
-  .smart-screen-container {
-    font-size: calc(16px * 2);
-  }
-  
-  .main-content {
-    padding: calc(80rpx * var(--spacing-scale));
-  }
-  
-  .center-status {
-    max-width: calc(900rpx * var(--spacing-scale));
-  }
-  
-  .status-icon-large {
-    width: calc(220rpx * var(--icon-scale));
-    height: calc(220rpx * var(--icon-scale));
-  }
-}
-
-/* 1080p (1920x1080+) */
-@media screen and (min-width: 1920px) and (max-width: 2559px) {
-  .smart-screen-container {
-    font-size: calc(16px * 1.5);
-  }
-  
-  .main-content {
-    padding: calc(60rpx * var(--spacing-scale));
-  }
-  
-  .center-status {
-    max-width: calc(800rpx * var(--spacing-scale));
-  }
-}
-
-/* 720p (1280x720+) */
-@media screen and (min-width: 1280px) and (max-width: 1919px) {
-  .smart-screen-container {
-    font-size: calc(16px * 1.2);
-  }
-  
-  .main-content {
-    padding: calc(50rpx * var(--spacing-scale));
-  }
-  
-  .center-status {
-    max-width: calc(700rpx * var(--spacing-scale));
-  }
-  
-  .status-icon-large {
-    width: calc(180rpx * var(--icon-scale));
-    height: calc(180rpx * var(--icon-scale));
-  }
-}
-
-/* 小屏幕适配 */
-@media screen and (max-width: 1279px) {
-  .top-bar {
-    padding: calc(20rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
-  }
-
-  .status-section {
-    gap: calc(12rpx * var(--spacing-scale));
-  }
-
-  .status-indicator {
-    padding: calc(6rpx * var(--spacing-scale)) calc(12rpx * var(--spacing-scale));
-    min-width: calc(60rpx * var(--spacing-scale));
-  }
-
-  .status-label {
-    font-size: calc(20rpx * var(--font-scale));
-  }
-
-  .time-display {
-    padding: calc(6rpx * var(--spacing-scale)) calc(12rpx * var(--spacing-scale));
-  }
-
-  .time-text {
-    font-size: calc(22rpx * var(--font-scale));
-  }
-
-  .main-content {
-    padding: calc(40rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .action-btn {
-    width: calc(200rpx * var(--spacing-scale));
-  }
-
-  .status-icon-large {
-    width: calc(150rpx * var(--icon-scale));
-    height: calc(150rpx * var(--icon-scale));
-  }
-
+/* 电视端特殊优化 */
+@media screen and (min-width: 1280px) {
   .main-status-text {
-    font-size: calc(36rpx * var(--font-scale));
+    font-size: 42px;
   }
-
-  .sub-status-text {
-    font-size: calc(24rpx * var(--font-scale));
+  
+  .loading-text {
+    font-size: 36px;
+  }
+  
+  .unknown-content-text {
+    font-size: 36px;
   }
 }
 
-/* 超宽屏适配 */
-@media screen and (min-aspect-ratio: 21/9) {
-  .main-content {
-    padding: calc(40rpx * var(--spacing-scale)) calc(120rpx * var(--spacing-scale));
+/* 4K分辨率优化 */
+@media screen and (min-width: 3840px) {
+  .main-status-text {
+    font-size: 48px;
+  }
+  
+  .loading-text {
+    font-size: 42px;
+  }
+  
+  .unknown-content-text {
+    font-size: 42px;
   }
   
   .center-status {
-    max-width: calc(1000rpx * var(--spacing-scale));
+    padding: 80px;
   }
 }
 
-/* 应用方向样式类 */
-.smart-screen-container.orientation-landscape {
-  /* 横屏应用布局 */
-  flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-}
-
-.smart-screen-container.orientation-landscape .top-bar {
-  flex-direction: row;
-  justify-content: space-between;
-}
-
-.smart-screen-container.orientation-landscape .status-section {
-  flex-direction: row;
-  gap: calc(20rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-landscape .main-content {
-  flex: 1;
-  padding: calc(60rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-landscape .action-buttons {
-  flex-direction: row;
-  gap: calc(30rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-portrait {
-  /* 竖屏应用布局 */
-  flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-}
-
-.smart-screen-container.orientation-portrait .top-bar {
-  flex-direction: column;
-  align-items: center;
-  gap: calc(15rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-portrait .status-section {
-  flex-direction: column;
-  gap: calc(10rpx * var(--spacing-scale));
-  align-items: center;
-}
-
-.smart-screen-container.orientation-portrait .center-status {
-  max-width: calc(600rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-portrait .main-content {
-  padding: calc(30rpx * var(--spacing-scale));
-}
-
-.smart-screen-container.orientation-portrait .action-buttons {
-  flex-direction: column;
-  gap: calc(15rpx * var(--spacing-scale));
-}
-
-/* 纵向屏幕适配 - 作为后备方案 */
-@media screen and (orientation: portrait) {
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) {
-    /* 竖屏时的特殊处理 */
-    flex-direction: column;
+/* 8K分辨率优化 */
+@media screen and (min-width: 7680px) {
+  .main-status-text {
+    font-size: 56px;
   }
   
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .top-bar {
-    flex-direction: column;
-    align-items: center;
-    gap: calc(15rpx * var(--spacing-scale));
+  .loading-text {
+    font-size: 48px;
   }
   
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .status-section {
-    flex-direction: column;
-    gap: calc(10rpx * var(--spacing-scale));
-    align-items: center;
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .center-status {
-    max-width: calc(600rpx * var(--spacing-scale));
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .main-content {
-    padding: calc(30rpx * var(--spacing-scale));
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .action-buttons {
-    flex-direction: column;
-    gap: calc(15rpx * var(--spacing-scale));
-  }
-}
-
-/* 横向屏幕适配 - 作为后备方案 */
-@media screen and (orientation: landscape) {
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) {
-    /* 横屏时的特殊处理 */
-    flex-direction: column;
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .top-bar {
-    flex-direction: row;
-    justify-content: space-between;
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .status-section {
-    flex-direction: row;
-    gap: calc(20rpx * var(--spacing-scale));
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .main-content {
-    flex: 1;
-    padding: calc(60rpx * var(--spacing-scale));
-  }
-  
-  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .action-buttons {
-    flex-direction: row;
-    gap: calc(30rpx * var(--spacing-scale));
-  }
-}
-
-/* 高DPI屏幕适配 */
-@media screen and (-webkit-min-device-pixel-ratio: 2) {
-  .smart-screen-container {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-}
-
-/* TV端特殊样式 */
-@supports (display: -webkit-box) {
-  /* 针对TV端的WebKit优化 */
-  .smart-screen-container {
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-}
-
-/* 防止内容溢出和性能优化 */
-.smart-screen-container * {
-  box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* 针对不同屏幕密度的优化 */
-@media screen and (-webkit-min-device-pixel-ratio: 3) {
-  .smart-screen-container {
-    font-size: calc(var(--font-scale) * 14px * 1.1);
-  }
-}
-
-/* 针对超高分辨率屏幕的优化 */
-@media screen and (min-resolution: 300dpi) {
-  .smart-screen-container {
-    font-size: calc(var(--font-scale) * 14px * 1.15);
-  }
-  
-  .status-icon-wrapper,
-  .status-icon-large {
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
-  }
-}
-
-/* 针对宽屏比例的优化 */
-@media screen and (min-aspect-ratio: 32/9) {
-  .main-content {
-    padding: calc(40rpx * var(--spacing-scale)) calc(200rpx * var(--spacing-scale));
+  .unknown-content-text {
+    font-size: 48px;
   }
   
   .center-status {
-    max-width: calc(1400rpx * var(--spacing-scale));
-  }
-  
-  .guide-tips {
-    max-width: calc(800rpx * var(--spacing-scale));
-  }
-}
-
-/* 针对竖屏或接近正方形屏幕的优化 */
-@media screen and (max-aspect-ratio: 4/3) {
-  .status-section {
-    flex-direction: column;
-    gap: calc(15rpx * var(--spacing-scale));
-    align-items: center;
-  }
-  
-  .center-status {
-    max-width: calc(500rpx * var(--spacing-scale));
-  }
-  
-  .action-buttons {
-    flex-direction: column;
-    gap: calc(20rpx * var(--spacing-scale));
+    padding: 100px;
   }
 }
 </style>

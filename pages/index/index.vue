@@ -57,40 +57,48 @@
           @error="handleContentError"
         />
 
-        <!-- 视频内容 (content_type: 3) -->
-        <VideoPlayer
+        <!-- 视频内容 (content_type: 3) - 使用Chunlei增强版 -->
+        <ChunleiVideoPlayer
           ref="videoPlayer"
           v-else-if="currentContent.content_type === CONTENT_TYPES.VIDEO"
           :src="currentContent.content_url"
-          :content-info="currentContent"
+          :title="currentContent.title || '视频播放'"
+          :poster="currentContent.thumbnail"
           :autoplay="true"
           :show-controls="false"
-          :loop="false"
-          :muted="false"
+          :loop="true"
+          :muted="true"
           :show-progress="false"
-          :poster="currentContent.thumbnail"
           :show-info="true"
           :show-play-indicator="false"
+          :theme-color="'#FF6022'"
+          :orientation="deviceInfo.isTV || deviceInfo.isLandscape"
+          :show-debug-info="showDebugInfo"
+          :content-info="currentContent"
           @play="handleContentLoad"
           @error="handleContentError"
           @ended="handleVideoEnded"
           @retry-failed="handleRetryFailed"
         />
 
-        <!-- 直播流内容 (content_type: 4) -->
-        <VideoPlayer
+        <!-- 直播流内容 (content_type: 4) - 使用Chunlei增强版 -->
+        <ChunleiVideoPlayer
           ref="livePlayer"
           v-else-if="currentContent.content_type === CONTENT_TYPES.LIVE_STREAM"
           :src="currentContent.content_url"
-          :content-info="currentContent"
+          :title="currentContent.title || '直播流'"
+          :poster="currentContent.thumbnail"
           :autoplay="true"
           :show-controls="false"
-          :loop="false"
-          :muted="false"
+          :loop="true"
+          :muted="true"
           :show-progress="false"
-          :poster="currentContent.thumbnail"
           :show-info="true"
           :show-play-indicator="false"
+          :theme-color="'#FF6022'"
+          :orientation="deviceInfo.isTV || deviceInfo.isLandscape"
+          :show-debug-info="showDebugInfo"
+          :content-info="currentContent"
           @play="handleContentLoad"
           @error="handleContentError"
           @retry-failed="handleRetryFailed"
@@ -148,12 +156,7 @@
           </view>
         </view>
 
-        <!-- 操作按钮 -->
-        <view class="action-buttons" v-if="showActionButtons">
-          <button class="action-btn" @click="handleRefresh" v-if="isConnected">
-            刷新内容
-          </button>
-        </view>
+       
       </view>
 
 
@@ -180,8 +183,10 @@ import { mapGetters, mapActions } from 'vuex'
 import { Logger } from '../../common/utils/logger.js'
 import { globalKeyHandler, KEYS } from '../../common/utils/keyHandler.js'
 import { CONTENT_TYPES } from '../../common/constants/constants.js'
+import { DeviceUtils } from '../../common/utils/deviceUtils.js'
 import SvgIcon from '../../components/SvgIcon.vue'
 import VideoPlayer from '../../components/VideoPlayer.vue'
+import ChunleiVideoPlayer from '../../components/ChunleiVideoPlayer.vue'
 import AudioPlayer from '../../components/AudioPlayer.vue'
 
 const logger = Logger.createTaggedLogger('IndexPage')
@@ -191,6 +196,7 @@ export default {
   components: {
     SvgIcon,
     VideoPlayer,
+    ChunleiVideoPlayer,
     AudioPlayer
   },
 
@@ -208,6 +214,21 @@ export default {
       durationTimer: null,
       currentContentIndex: 0,
       contentList: [],
+
+      // 设备信息
+      deviceInfo: {
+        screenWidth: 0,
+        screenHeight: 0,
+        pixelRatio: 1,
+        windowWidth: 0,
+        windowHeight: 0,
+        platform: '',
+        brand: '',
+        model: '',
+        system: '',
+        isTV: false,
+        screenSize: 'normal'
+      },
 
       // 引导提示
       tips: [
@@ -234,10 +255,15 @@ export default {
       'getContentData'
     ]),
 
-
     // 应用版本
     appVersion() {
       return this.getAppVersion
+    },
+
+    // 显示调试信息
+    showDebugInfo() {
+      // 在开发环境或者特定条件下显示调试信息
+      return false
     },
 
     // 网络状态（基于设备在线状态）
@@ -355,8 +381,6 @@ export default {
       return this.getConnectionStatus.isConnected
     },
 
-
-
     // 当前要显示的内容
     currentContent() {
       const contentData = this.getContentData
@@ -383,7 +407,65 @@ export default {
       return null
     },
 
+    // 动态样式变量
+    dynamicStyles() {
+      const { screenWidth, screenHeight, isTV, screenSize, pixelRatio } = this.deviceInfo
+      
+      // 根据屏幕尺寸调整基础单位
+      let baseUnit = 1
+      let fontScale = 1
+      let spacingScale = 1
+      let iconScale = 1
+      
+      // 根据实际分辨率计算缩放比例
+      if (screenWidth >= 3840) { // 4K
+        baseUnit = 2.5
+        fontScale = 2.5
+        spacingScale = 2.5
+        iconScale = 2.5
+      } else if (screenWidth >= 2560) { // 2K
+        baseUnit = 2.0
+        fontScale = 2.0
+        spacingScale = 2.0
+        iconScale = 2.0
+      } else if (screenWidth >= 1920) { // 1080p
+        baseUnit = 1.5
+        fontScale = 1.5
+        spacingScale = 1.5
+        iconScale = 1.5
+      } else if (screenWidth >= 1280) { // 720p
+        baseUnit = 1.2
+        fontScale = 1.2
+        spacingScale = 1.2
+        iconScale = 1.2
+      }
 
+      // TV端特殊处理 - 考虑观看距离，需要更大的字体和间距
+      if (isTV) {
+        fontScale *= 1.3 // TV端字体放大30%
+        spacingScale *= 1.2 // TV端间距放大20%
+        iconScale *= 1.3 // TV端图标放大30%
+        baseUnit *= 1.3 // 整体放大30%
+      }
+      
+      // 高DPI屏幕调整
+      if (pixelRatio > 2) {
+        fontScale *= 1.1
+        iconScale *= 1.1
+      }
+
+      return {
+        '--base-unit': baseUnit,
+        '--screen-width': screenWidth + 'px',
+        '--screen-height': screenHeight + 'px',
+        '--pixel-ratio': pixelRatio,
+        '--is-tv': isTV ? 1 : 0,
+        '--font-scale': fontScale,
+        '--spacing-scale': spacingScale,
+        '--icon-scale': iconScale,
+        '--screen-size': screenSize
+      }
+    }
   },
 
   watch: {
@@ -402,6 +484,9 @@ export default {
     try {
       this.isLoading = true
       this.loadingText = '正在初始化应用...'
+
+      // 获取设备信息
+      await this.getDeviceInfo()
 
       // 初始化应用
       if (!this.isAppInitialized) {
@@ -456,6 +541,204 @@ export default {
       'connect',
       'getContent'
     ]),
+
+    // 获取设备信息
+    async getDeviceInfo() {
+      try {
+        const systemInfo = await DeviceUtils.getSystemInfo()
+        
+        // 判断是否为TV端
+        const isTV = this.isTelevision(systemInfo)
+        
+        // 根据屏幕尺寸分类
+        const screenSize = this.getScreenSize(systemInfo.screenWidth, systemInfo.screenHeight)
+        
+        this.deviceInfo = {
+          screenWidth: systemInfo.screenWidth || 0,
+          screenHeight: systemInfo.screenHeight || 0,
+          pixelRatio: systemInfo.pixelRatio || 1,
+          windowWidth: systemInfo.windowWidth || 0,
+          windowHeight: systemInfo.windowHeight || 0,
+          platform: systemInfo.platform || '',
+          brand: systemInfo.brand || '',
+          model: systemInfo.model || '',
+          system: systemInfo.system || '',
+          isTV,
+          screenSize
+        }
+        
+        logger.info('设备信息获取成功:', this.deviceInfo)
+        
+        // 检测最佳应用方向
+        await this.detectOptimalAppOrientation()
+        
+        // 应用动态样式
+        this.applyDynamicStyles()
+        
+      } catch (error) {
+        logger.error('获取设备信息失败:', error)
+        // 使用默认值
+        this.deviceInfo = {
+          screenWidth: 1920,
+          screenHeight: 1080,
+          pixelRatio: 1,
+          windowWidth: 1920,
+          windowHeight: 1080,
+          platform: 'unknown',
+          brand: '',
+          model: '',
+          system: '',
+          isTV: true, // 默认假设是TV端
+          screenSize: 'large'
+        }
+        
+        // 即使获取失败也要应用默认样式
+        this.applyDynamicStyles()
+      }
+    },
+
+    // 判断是否为电视端
+    isTelevision(systemInfo) {
+      const { platform, brand, model, screenWidth, screenHeight, system } = systemInfo
+      
+      // 根据平台判断
+      if (platform === 'android') {
+        // Android TV的特征
+        if (brand && (
+          brand.toLowerCase().includes('tv') ||
+          brand.toLowerCase().includes('android tv') ||
+          brand.toLowerCase().includes('smart tv') ||
+          brand.toLowerCase().includes('xiaomi') ||
+          brand.toLowerCase().includes('sony') ||
+          brand.toLowerCase().includes('samsung') ||
+          brand.toLowerCase().includes('lg') ||
+          brand.toLowerCase().includes('tcl') ||
+          brand.toLowerCase().includes('hisense') ||
+          brand.toLowerCase().includes('changhong') ||
+          brand.toLowerCase().includes('skyworth')
+        )) {
+          return true
+        }
+        
+        // 根据型号判断
+        if (model && (
+          model.toLowerCase().includes('tv') ||
+          model.toLowerCase().includes('box') ||
+          model.toLowerCase().includes('stick') ||
+          model.toLowerCase().includes('cast') ||
+          model.toLowerCase().includes('fire') ||
+          model.toLowerCase().includes('roku') ||
+          model.toLowerCase().includes('apple tv')
+        )) {
+          return true
+        }
+        
+        // 根据系统版本判断（Android TV通常有特定的系统标识）
+        if (system && (
+          system.toLowerCase().includes('android tv') ||
+          system.toLowerCase().includes('google tv')
+        )) {
+          return true
+        }
+      }
+      
+      // 根据屏幕尺寸判断（大屏幕通常是TV）
+      if (screenWidth >= 1280 && screenHeight >= 720) {
+        const aspectRatio = screenWidth / screenHeight
+        // 常见的TV分辨率比例
+        if (Math.abs(aspectRatio - 16/9) < 0.2 || Math.abs(aspectRatio - 4/3) < 0.2) {
+          // 如果是常见TV分辨率且屏幕足够大，很可能是TV
+          if (screenWidth >= 1920 || screenHeight >= 1080) {
+            return true
+          }
+        }
+      }
+      
+      // 特殊判断：如果屏幕非常大，很可能是TV
+      if (screenWidth >= 2560 || screenHeight >= 1440) {
+        return true
+      }
+      
+      return false
+    },
+
+    // 获取屏幕尺寸分类
+    getScreenSize(width, height) {
+      if (width >= 3840 || height >= 2160) {
+        return 'ultra' // 4K及以上
+      } else if (width >= 2560 || height >= 1440) {
+        return 'extra-large' // 2K
+      } else if (width >= 1920 || height >= 1080) {
+        return 'large' // 1080p
+      } else if (width >= 1280 || height >= 720) {
+        return 'medium' // 720p
+      } else {
+        return 'small' // 小屏幕
+      }
+    },
+
+    // 检测最佳应用方向
+    async detectOptimalAppOrientation() {
+      try {
+        logger.info('开始检测最佳应用方向')
+        
+        // 使用DeviceUtils检测最佳应用方向
+        const orientation = await DeviceUtils.detectOptimalAppOrientation()
+        
+        logger.info('检测到最佳应用方向:', orientation)
+        
+        // 更新设备信息中的方向信息
+        this.deviceInfo.orientation = orientation
+        
+        // 根据检测结果应用相应的样式类
+        this.applyOrientationStyles(orientation)
+        
+      } catch (error) {
+        logger.error('检测最佳应用方向失败:', error)
+        // 默认使用横屏布局
+        this.deviceInfo.orientation = 'landscape'
+        this.applyOrientationStyles('landscape')
+      }
+    },
+
+    // 应用方向样式
+    applyOrientationStyles(orientation) {
+      try {
+        // 获取应用容器元素
+        const appContainer = document.querySelector('.smart-screen-container')
+        if (appContainer) {
+          // 移除所有方向类
+          appContainer.classList.remove('orientation-landscape', 'orientation-portrait')
+          
+          // 添加当前方向类
+          appContainer.classList.add(`orientation-${orientation}`)
+          
+          logger.info('应用方向样式已应用:', orientation)
+        }
+        
+        // 同时应用动态样式
+        this.applyDynamicStyles()
+        
+      } catch (error) {
+        logger.error('应用方向样式失败:', error)
+      }
+    },
+
+    // 应用动态样式
+    applyDynamicStyles() {
+      try {
+        const rootElement = document.documentElement || document.body
+        if (rootElement && rootElement.style) {
+          Object.keys(this.dynamicStyles).forEach(key => {
+            rootElement.style.setProperty(key, this.dynamicStyles[key])
+          })
+          
+          logger.info('动态样式已应用:', this.dynamicStyles)
+        }
+      } catch (error) {
+        logger.error('应用动态样式失败:', error)
+      }
+    },
 
     // 开始时间更新
     startTimeUpdate() {
@@ -923,12 +1206,88 @@ export default {
     setupEventListeners() {
       // 监听停止所有播放器的事件
       uni.$on('stopAllPlayers', this.handleStopAllPlayers)
+      
+      // 监听屏幕方向变化
+      this.setupOrientationListener()
+      
       logger.info('事件监听器已设置')
+    },
+
+    // 设置屏幕方向监听
+    setupOrientationListener() {
+      // #ifdef APP-PLUS
+      // 监听屏幕方向变化
+      plus.screen.onOrientationChange = (orientation) => {
+        logger.info('屏幕方向发生变化:', orientation)
+        this.handleOrientationChange(orientation)
+      }
+      // #endif
+      
+      // 监听窗口大小变化（通用方法）
+      uni.onWindowResize((res) => {
+        logger.info('窗口大小发生变化:', res)
+        this.handleWindowResize(res)
+      })
+    },
+
+    // 处理屏幕方向变化
+    handleOrientationChange(orientation) {
+      logger.info('处理屏幕方向变化:', orientation)
+      
+      // 更新设备信息
+      this.deviceInfo.orientation = orientation
+      
+      // 延迟更新屏幕尺寸信息
+      setTimeout(async () => {
+        try {
+          const systemInfo = await DeviceUtils.getSystemInfo()
+          this.deviceInfo.screenWidth = systemInfo.screenWidth || this.deviceInfo.screenWidth
+          this.deviceInfo.screenHeight = systemInfo.screenHeight || this.deviceInfo.screenHeight
+          this.deviceInfo.windowWidth = systemInfo.windowWidth || this.deviceInfo.windowWidth
+          this.deviceInfo.windowHeight = systemInfo.windowHeight || this.deviceInfo.windowHeight
+          
+          // 重新应用动态样式
+          this.applyDynamicStyles()
+          
+          logger.info('屏幕方向变化后设备信息已更新')
+        } catch (error) {
+          logger.error('屏幕方向变化后更新设备信息失败:', error)
+        }
+      }, 500)
+    },
+
+    // 处理窗口大小变化
+    handleWindowResize(res) {
+      logger.info('处理窗口大小变化:', res)
+      
+      // 更新设备信息
+      this.deviceInfo.windowWidth = res.size.windowWidth
+      this.deviceInfo.windowHeight = res.size.windowHeight
+      
+      // 判断新的屏幕方向
+      const isLandscape = res.size.windowWidth > res.size.windowHeight
+      const newOrientation = isLandscape ? 'landscape' : 'portrait'
+      
+      if (this.deviceInfo.orientation !== newOrientation) {
+        this.deviceInfo.orientation = newOrientation
+        logger.info('窗口大小变化导致屏幕方向改变:', newOrientation)
+        
+        // 重新应用动态样式
+        this.applyDynamicStyles()
+      }
     },
 
     // 清理事件监听器
     cleanupEventListeners() {
       uni.$off('stopAllPlayers', this.handleStopAllPlayers)
+      
+      // 清理屏幕方向监听
+      // #ifdef APP-PLUS
+      if (plus.screen.onOrientationChange) {
+        plus.screen.onOrientationChange = null
+      }
+      // #endif
+      
       logger.info('事件监听器已清理')
     },
 
@@ -1036,6 +1395,19 @@ export default {
 </script>
 
 <style scoped>
+/* CSS变量定义 */
+:root {
+  --base-unit: 1;
+  --screen-width: 1920px;
+  --screen-height: 1080px;
+  --pixel-ratio: 1;
+  --is-tv: 1;
+  --font-scale: 1;
+  --spacing-scale: 1;
+  --icon-scale: 1;
+  --screen-size: 'large';
+}
+
 .smart-screen-container {
   width: 100vw;
   height: 100vh;
@@ -1044,6 +1416,9 @@ export default {
   flex-direction: column;
   color: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* 使用CSS变量进行动态缩放 */
+  font-size: calc(14px * var(--font-scale));
+  overflow: hidden;
 }
 
 /* 顶部状态栏 */
@@ -1051,25 +1426,26 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 40rpx 60rpx;
+  padding: calc(40rpx * var(--spacing-scale)) calc(60rpx * var(--spacing-scale));
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: calc(80rpx * var(--spacing-scale));
 }
 
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: calc(20rpx * var(--spacing-scale));
 }
 
 .logo {
-  width: 80rpx;
-  height: 80rpx;
+  width: calc(80rpx * var(--icon-scale));
+  height: calc(80rpx * var(--icon-scale));
 }
 
 .app-name {
-  font-size: 36rpx;
+  font-size: calc(36rpx * var(--font-scale));
   font-weight: 600;
   color: #ffffff;
 }
@@ -1077,20 +1453,20 @@ export default {
 .status-section {
   display: flex;
   align-items: center;
-  gap: 20rpx;
+  gap: calc(20rpx * var(--spacing-scale));
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 8rpx 16rpx;
-  border-radius: 16rpx;
+  gap: calc(8rpx * var(--spacing-scale));
+  padding: calc(8rpx * var(--spacing-scale)) calc(16rpx * var(--spacing-scale));
+  border-radius: calc(16rpx * var(--spacing-scale));
   background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8rpx);
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   transition: all 0.3s ease;
-  min-width: 80rpx;
+  min-width: calc(80rpx * var(--spacing-scale));
 }
 
 .status-indicator.status-connected {
@@ -1112,12 +1488,12 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24rpx;
-  height: 24rpx;
+  width: calc(24rpx * var(--icon-scale));
+  height: calc(24rpx * var(--icon-scale));
 }
 
 .status-label {
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   font-weight: 500;
   color: rgba(255, 255, 255, 0.9);
   white-space: nowrap;
@@ -1126,16 +1502,16 @@ export default {
 .time-display {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  padding: 8rpx 16rpx;
+  gap: calc(8rpx * var(--spacing-scale));
+  padding: calc(8rpx * var(--spacing-scale)) calc(16rpx * var(--spacing-scale));
   background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8rpx);
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16rpx;
+  border-radius: calc(16rpx * var(--spacing-scale));
 }
 
 .time-text {
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   font-weight: 600;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
   color: rgba(255, 255, 255, 0.9);
@@ -1148,82 +1524,86 @@ export default {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 60rpx;
+  padding: calc(60rpx * var(--spacing-scale));
   position: relative;
+  min-height: 0; /* 防止flex子元素溢出 */
 }
 
 .center-status {
   text-align: center;
-  max-width: 800rpx;
+  max-width: calc(800rpx * var(--spacing-scale));
+  width: 100%;
 }
 
 .status-icon-large {
-  width: 200rpx;
-  height: 200rpx;
+  width: calc(200rpx * var(--icon-scale));
+  height: calc(200rpx * var(--icon-scale));
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 40rpx;
+  margin: 0 auto calc(40rpx * var(--spacing-scale));
   transition: all 0.3s ease;
 }
 
 .status-icon-large.status-active {
   background: rgba(76, 175, 80, 0.2);
   border: 3px solid rgba(76, 175, 80, 0.5);
-  box-shadow: 0 0 30rpx rgba(76, 175, 80, 0.3);
+  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(76, 175, 80, 0.3);
 }
 
 .status-icon-large.status-inactive {
   background: rgba(255, 193, 7, 0.2);
   border: 3px solid rgba(255, 193, 7, 0.5);
-  box-shadow: 0 0 30rpx rgba(255, 193, 7, 0.3);
+  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(255, 193, 7, 0.3);
 }
 
 .status-icon-large.status-disconnected {
   background: rgba(244, 67, 54, 0.2);
   border: 3px solid rgba(244, 67, 54, 0.5);
-  box-shadow: 0 0 30rpx rgba(244, 67, 54, 0.3);
+  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(244, 67, 54, 0.3);
 }
 
 .status-icon-large.status-offline {
   background: rgba(158, 158, 158, 0.2);
   border: 3px solid rgba(158, 158, 158, 0.5);
-  box-shadow: 0 0 30rpx rgba(158, 158, 158, 0.3);
+  box-shadow: 0 0 calc(30rpx * var(--spacing-scale)) rgba(158, 158, 158, 0.3);
 }
 
-/* 移除large-icon样式，现在使用SVG图标 */
-
 .status-text-area {
-  margin-bottom: 60rpx;
+  margin-bottom: calc(60rpx * var(--spacing-scale));
 }
 
 .main-status-text {
-  font-size: 48rpx;
+  font-size: calc(48rpx * var(--font-scale));
   font-weight: 600;
-  margin-bottom: 20rpx;
+  margin-bottom: calc(20rpx * var(--spacing-scale));
   display: block;
+  line-height: 1.2;
 }
 
 .sub-status-text {
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.8);
   display: block;
+  line-height: 1.4;
 }
 
 /* 引导提示 */
 .guide-tips {
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
-  padding: 40rpx;
-  margin-bottom: 60rpx;
+  border-radius: calc(20rpx * var(--spacing-scale));
+  padding: calc(40rpx * var(--spacing-scale));
+  margin-bottom: calc(60rpx * var(--spacing-scale));
   backdrop-filter: blur(10px);
+  width: 100%;
+  max-width: calc(600rpx * var(--spacing-scale));
 }
 
 .guide-text {
-  font-size: 32rpx;
+  font-size: calc(32rpx * var(--font-scale));
   font-weight: 600;
-  margin-bottom: 30rpx;
+  margin-bottom: calc(30rpx * var(--spacing-scale));
   display: block;
 }
 
@@ -1233,30 +1613,32 @@ export default {
 
 .tip-item {
   display: block;
-  font-size: 26rpx;
+  font-size: calc(26rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 15rpx;
+  margin-bottom: calc(15rpx * var(--spacing-scale));
   line-height: 1.5;
 }
 
 /* 操作按钮 */
 .action-buttons {
   display: flex;
-  gap: 30rpx;
+  gap: calc(30rpx * var(--spacing-scale));
   justify-content: center;
   flex-wrap: wrap;
 }
 
 .action-btn {
-  padding: 20rpx 40rpx;
-  border-radius: 25rpx;
+  padding: calc(20rpx * var(--spacing-scale)) calc(40rpx * var(--spacing-scale));
+  border-radius: calc(25rpx * var(--spacing-scale));
   border: 2px solid rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   font-weight: 500;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
+  min-width: calc(120rpx * var(--spacing-scale));
+  cursor: pointer;
 }
 
 .action-btn:hover {
@@ -1311,20 +1693,20 @@ export default {
 /* 底部版权信息 */
 .footer {
   text-align: center;
-  padding: 30rpx;
+  padding: calc(30rpx * var(--spacing-scale));
   background: rgba(0, 0, 0, 0.2);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .copyright {
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.7);
   display: block;
-  margin-bottom: 10rpx;
+  margin-bottom: calc(10rpx * var(--spacing-scale));
 }
 
 .version {
-  font-size: 20rpx;
+  font-size: calc(20rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.5);
   display: block;
 }
@@ -1346,20 +1728,20 @@ export default {
 .loading-content {
   text-align: center;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 20rpx;
-  padding: 60rpx;
+  border-radius: calc(20rpx * var(--spacing-scale));
+  padding: calc(60rpx * var(--spacing-scale));
   backdrop-filter: blur(10px);
 }
 
 .loading-icon {
-  font-size: 60rpx;
+  font-size: calc(60rpx * var(--font-scale));
   display: block;
-  margin-bottom: 20rpx;
+  margin-bottom: calc(20rpx * var(--spacing-scale));
   animation: spin 1s linear infinite;
 }
 
 .loading-text {
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   color: #ffffff;
   display: block;
 }
@@ -1367,47 +1749,6 @@ export default {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-/* 响应式设计 */
-@media screen and (max-width: 750px) {
-  .top-bar {
-    padding: 20rpx 30rpx;
-  }
-
-  .status-section {
-    gap: 12rpx;
-  }
-
-  .status-indicator {
-    padding: 6rpx 12rpx;
-    min-width: 60rpx;
-  }
-
-  .status-label {
-    font-size: 20rpx;
-  }
-
-  .time-display {
-    padding: 6rpx 12rpx;
-  }
-
-  .time-text {
-    font-size: 22rpx;
-  }
-
-  .main-content {
-    padding: 40rpx 30rpx;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .action-btn {
-    width: 200rpx;
-  }
 }
 
 /* 内容显示样式 */
@@ -1421,24 +1762,33 @@ export default {
   align-items: center;
   justify-content: center;
   background-color: #000;
+  overflow: hidden;
 }
 
 /* 网页内容 */
 .content-webview {
   width: 100%;
   height: 100%;
+  border: none;
+  background: #000;
 }
 
 /* 图片内容 */
 .content-image {
   width: 100%;
   height: 100%;
+  object-fit: contain;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 /* 视频内容 */
 .content-video {
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 /* 音频内容 */
@@ -1456,24 +1806,29 @@ export default {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  max-width: 600rpx;
+  max-width: calc(600rpx * var(--spacing-scale));
+  padding: calc(40rpx * var(--spacing-scale));
 }
 
 .audio-cover {
-  width: 300rpx;
-  height: 300rpx;
-  border-radius: 20rpx;
+  width: calc(300rpx * var(--icon-scale));
+  height: calc(300rpx * var(--icon-scale));
+  border-radius: calc(20rpx * var(--spacing-scale));
   overflow: hidden;
-  margin-bottom: 40rpx;
+  margin-bottom: calc(40rpx * var(--spacing-scale));
   background: rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 calc(20rpx * var(--spacing-scale)) calc(40rpx * var(--spacing-scale)) rgba(0, 0, 0, 0.3);
 }
 
 .audio-thumbnail {
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .audio-default-cover {
@@ -1487,25 +1842,28 @@ export default {
 
 .audio-info {
   width: 100%;
+  margin-bottom: calc(30rpx * var(--spacing-scale));
 }
 
 .audio-title {
-  font-size: 36rpx;
+  font-size: calc(36rpx * var(--font-scale));
   font-weight: 600;
   color: #ffffff;
-  margin-bottom: 20rpx;
+  margin-bottom: calc(20rpx * var(--spacing-scale));
   display: block;
+  line-height: 1.3;
+  text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.5);
 }
 
 .audio-controls {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
+  gap: calc(12rpx * var(--spacing-scale));
 }
 
 .audio-status {
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -1521,39 +1879,399 @@ export default {
 
 .unknown-content-info {
   text-align: center;
-  max-width: 600rpx;
-  padding: 40rpx;
+  max-width: calc(600rpx * var(--spacing-scale));
+  padding: calc(40rpx * var(--spacing-scale));
 }
 
 .unknown-content-text {
-  font-size: 32rpx;
+  font-size: calc(32rpx * var(--font-scale));
   font-weight: 600;
   color: #FF9800;
-  margin: 20rpx 0;
+  margin: calc(20rpx * var(--spacing-scale)) 0;
   display: block;
+  line-height: 1.3;
 }
 
 .unknown-content-url {
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   color: rgba(255, 255, 255, 0.7);
   word-break: break-all;
   display: block;
+  line-height: 1.4;
 }
 
 .content-title-overlay {
   position: absolute;
-  bottom: 40rpx;
-  left: 40rpx;
-  right: 40rpx;
+  bottom: calc(40rpx * var(--spacing-scale));
+  left: calc(40rpx * var(--spacing-scale));
+  right: calc(40rpx * var(--spacing-scale));
   background-color: rgba(0, 0, 0, 0.7);
-  padding: 20rpx 30rpx;
-  border-radius: 10rpx;
+  padding: calc(20rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
+  border-radius: calc(10rpx * var(--spacing-scale));
+  backdrop-filter: blur(5px);
 }
 
 .content-title-text {
   color: #fff;
-  font-size: 32rpx;
+  font-size: calc(32rpx * var(--font-scale));
   font-weight: 500;
   text-align: center;
+  line-height: 1.3;
+}
+
+/* 特定分辨率适配 */
+/* 8K及以上 (7680x4320+) */
+@media screen and (min-width: 7680px) {
+  .smart-screen-container {
+    font-size: calc(16px * 4);
+  }
+  
+  .main-content {
+    padding: calc(120rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(1200rpx * var(--spacing-scale));
+  }
+}
+
+/* 4K及以上 (3840x2160+) */
+@media screen and (min-width: 3840px) and (max-width: 7679px) {
+  .smart-screen-container {
+    font-size: calc(16px * 2.5);
+  }
+  
+  .main-content {
+    padding: calc(100rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(1000rpx * var(--spacing-scale));
+  }
+  
+  .status-icon-large {
+    width: calc(250rpx * var(--icon-scale));
+    height: calc(250rpx * var(--icon-scale));
+  }
+}
+
+/* 2K (2560x1440+) */
+@media screen and (min-width: 2560px) and (max-width: 3839px) {
+  .smart-screen-container {
+    font-size: calc(16px * 2);
+  }
+  
+  .main-content {
+    padding: calc(80rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(900rpx * var(--spacing-scale));
+  }
+  
+  .status-icon-large {
+    width: calc(220rpx * var(--icon-scale));
+    height: calc(220rpx * var(--icon-scale));
+  }
+}
+
+/* 1080p (1920x1080+) */
+@media screen and (min-width: 1920px) and (max-width: 2559px) {
+  .smart-screen-container {
+    font-size: calc(16px * 1.5);
+  }
+  
+  .main-content {
+    padding: calc(60rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(800rpx * var(--spacing-scale));
+  }
+}
+
+/* 720p (1280x720+) */
+@media screen and (min-width: 1280px) and (max-width: 1919px) {
+  .smart-screen-container {
+    font-size: calc(16px * 1.2);
+  }
+  
+  .main-content {
+    padding: calc(50rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(700rpx * var(--spacing-scale));
+  }
+  
+  .status-icon-large {
+    width: calc(180rpx * var(--icon-scale));
+    height: calc(180rpx * var(--icon-scale));
+  }
+}
+
+/* 小屏幕适配 */
+@media screen and (max-width: 1279px) {
+  .top-bar {
+    padding: calc(20rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
+  }
+
+  .status-section {
+    gap: calc(12rpx * var(--spacing-scale));
+  }
+
+  .status-indicator {
+    padding: calc(6rpx * var(--spacing-scale)) calc(12rpx * var(--spacing-scale));
+    min-width: calc(60rpx * var(--spacing-scale));
+  }
+
+  .status-label {
+    font-size: calc(20rpx * var(--font-scale));
+  }
+
+  .time-display {
+    padding: calc(6rpx * var(--spacing-scale)) calc(12rpx * var(--spacing-scale));
+  }
+
+  .time-text {
+    font-size: calc(22rpx * var(--font-scale));
+  }
+
+  .main-content {
+    padding: calc(40rpx * var(--spacing-scale)) calc(30rpx * var(--spacing-scale));
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .action-btn {
+    width: calc(200rpx * var(--spacing-scale));
+  }
+
+  .status-icon-large {
+    width: calc(150rpx * var(--icon-scale));
+    height: calc(150rpx * var(--icon-scale));
+  }
+
+  .main-status-text {
+    font-size: calc(36rpx * var(--font-scale));
+  }
+
+  .sub-status-text {
+    font-size: calc(24rpx * var(--font-scale));
+  }
+}
+
+/* 超宽屏适配 */
+@media screen and (min-aspect-ratio: 21/9) {
+  .main-content {
+    padding: calc(40rpx * var(--spacing-scale)) calc(120rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(1000rpx * var(--spacing-scale));
+  }
+}
+
+/* 应用方向样式类 */
+.smart-screen-container.orientation-landscape {
+  /* 横屏应用布局 */
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.smart-screen-container.orientation-landscape .top-bar {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.smart-screen-container.orientation-landscape .status-section {
+  flex-direction: row;
+  gap: calc(20rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-landscape .main-content {
+  flex: 1;
+  padding: calc(60rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-landscape .action-buttons {
+  flex-direction: row;
+  gap: calc(30rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-portrait {
+  /* 竖屏应用布局 */
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+.smart-screen-container.orientation-portrait .top-bar {
+  flex-direction: column;
+  align-items: center;
+  gap: calc(15rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-portrait .status-section {
+  flex-direction: column;
+  gap: calc(10rpx * var(--spacing-scale));
+  align-items: center;
+}
+
+.smart-screen-container.orientation-portrait .center-status {
+  max-width: calc(600rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-portrait .main-content {
+  padding: calc(30rpx * var(--spacing-scale));
+}
+
+.smart-screen-container.orientation-portrait .action-buttons {
+  flex-direction: column;
+  gap: calc(15rpx * var(--spacing-scale));
+}
+
+/* 纵向屏幕适配 - 作为后备方案 */
+@media screen and (orientation: portrait) {
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) {
+    /* 竖屏时的特殊处理 */
+    flex-direction: column;
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .top-bar {
+    flex-direction: column;
+    align-items: center;
+    gap: calc(15rpx * var(--spacing-scale));
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .status-section {
+    flex-direction: column;
+    gap: calc(10rpx * var(--spacing-scale));
+    align-items: center;
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .center-status {
+    max-width: calc(600rpx * var(--spacing-scale));
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .main-content {
+    padding: calc(30rpx * var(--spacing-scale));
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .action-buttons {
+    flex-direction: column;
+    gap: calc(15rpx * var(--spacing-scale));
+  }
+}
+
+/* 横向屏幕适配 - 作为后备方案 */
+@media screen and (orientation: landscape) {
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) {
+    /* 横屏时的特殊处理 */
+    flex-direction: column;
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .top-bar {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .status-section {
+    flex-direction: row;
+    gap: calc(20rpx * var(--spacing-scale));
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .main-content {
+    flex: 1;
+    padding: calc(60rpx * var(--spacing-scale));
+  }
+  
+  .smart-screen-container:not(.orientation-landscape):not(.orientation-portrait) .action-buttons {
+    flex-direction: row;
+    gap: calc(30rpx * var(--spacing-scale));
+  }
+}
+
+/* 高DPI屏幕适配 */
+@media screen and (-webkit-min-device-pixel-ratio: 2) {
+  .smart-screen-container {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* TV端特殊样式 */
+@supports (display: -webkit-box) {
+  /* 针对TV端的WebKit优化 */
+  .smart-screen-container {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+}
+
+/* 防止内容溢出和性能优化 */
+.smart-screen-container * {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 针对不同屏幕密度的优化 */
+@media screen and (-webkit-min-device-pixel-ratio: 3) {
+  .smart-screen-container {
+    font-size: calc(var(--font-scale) * 14px * 1.1);
+  }
+}
+
+/* 针对超高分辨率屏幕的优化 */
+@media screen and (min-resolution: 300dpi) {
+  .smart-screen-container {
+    font-size: calc(var(--font-scale) * 14px * 1.15);
+  }
+  
+  .status-icon-wrapper,
+  .status-icon-large {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* 针对宽屏比例的优化 */
+@media screen and (min-aspect-ratio: 32/9) {
+  .main-content {
+    padding: calc(40rpx * var(--spacing-scale)) calc(200rpx * var(--spacing-scale));
+  }
+  
+  .center-status {
+    max-width: calc(1400rpx * var(--spacing-scale));
+  }
+  
+  .guide-tips {
+    max-width: calc(800rpx * var(--spacing-scale));
+  }
+}
+
+/* 针对竖屏或接近正方形屏幕的优化 */
+@media screen and (max-aspect-ratio: 4/3) {
+  .status-section {
+    flex-direction: column;
+    gap: calc(15rpx * var(--spacing-scale));
+    align-items: center;
+  }
+  
+  .center-status {
+    max-width: calc(500rpx * var(--spacing-scale));
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: calc(20rpx * var(--spacing-scale));
+  }
 }
 </style>

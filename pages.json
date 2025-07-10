@@ -3,7 +3,8 @@
 			"path": "pages/index/index",
 			"style": {
 				"navigationBarTitleText": "SmartScreen",
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"pageOrientation": "landscape"
 			}
 		}
 	],
@@ -11,7 +12,8 @@
 		"navigationBarTextStyle": "white",
 		"navigationBarTitleText": "SmartScreen",
 		"navigationBarBackgroundColor": "#1e3c72",
-		"backgroundColor": "#1e3c72"
+		"backgroundColor": "#1e3c72",
+		"pageOrientation": "landscape"
 	},
 	"uniIdRouter": {}
 }

@@ -30,7 +30,7 @@
     />
 
     <!-- 加载状态覆盖层 -->
-    <view v-if="isLoading" class="loading-overlay">
+    <view v-if="shouldShowLoading" class="loading-overlay">
       <view class="loading-content">
         <view class="loading-spinner"></view>
         <text class="loading-text">{{ loadingText }}</text>
@@ -64,6 +64,17 @@
         :color="'rgba(255,255,255,0.8)'" 
         :size="40" 
       />
+    </view>
+
+    <!-- 调试信息 (开发环境) -->
+    <view v-if="false" class="debug-info">
+      <text class="debug-title">VideoPlayer Debug</text>
+      <text class="debug-item">状态: {{ statusText }}</text>
+      <text class="debug-item">加载中: {{ isLoading ? '是' : '否' }}</text>
+      <text class="debug-item">播放中: {{ isPlaying ? '是' : '否' }}</text>
+      <text class="debug-item">准备就绪: {{ canPlayReady ? '是' : '否' }}</text>
+      <text class="debug-item">有错误: {{ hasError ? '是' : '否' }}</text>
+      <text class="debug-item">重试次数: {{ retryCount }}</text>
     </view>
   </view>
 </template>
@@ -139,10 +150,26 @@ export default {
     }
   },
 
+  computed: {
+    // 是否应该显示加载状态
+    shouldShowLoading() {
+      return this.isLoading && !this.hasError && !this.isPlaying
+    },
+
+    // 播放器状态文本
+    statusText() {
+      if (this.hasError) return '播放错误'
+      if (this.isPlaying) return '正在播放'
+      if (this.canPlayReady) return '准备就绪'
+      if (this.isLoading) return '加载中'
+      return '等待中'
+    }
+  },
+
   data() {
     return {
       videoId: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      isLoading: true,
+      isLoading: false, // 初始化为false，避免不必要的加载状态
       loadingText: '正在加载视频...',
       hasError: false,
       errorMessage: '',
@@ -151,7 +178,8 @@ export default {
       duration: 0,
       buffered: 0,
       retryCount: 0,
-      maxRetries: 3
+      maxRetries: 3,
+      canPlayReady: false // 新增：标记视频是否准备好播放
     }
   },
 
@@ -178,6 +206,11 @@ export default {
     // 监听停止播放事件
     uni.$on('stopVideoPlayers', this.handleStopEvent)
     uni.$on('stopAllPlayers', this.handleStopEvent)
+
+    // 如果有视频源，开始加载
+    if (this.src) {
+      this.startLoading()
+    }
   },
 
   beforeDestroy() {
@@ -198,10 +231,9 @@ export default {
 
       if (newSrc) {
         logger.info('🎬 准备播放新视频:', newSrc)
-        // 重置状态
-        this.isLoading = true
-        this.hasError = false
-        this.retryCount = 0
+        // 重置状态并开始加载
+        this.resetState()
+        this.startLoading()
       }
     },
 
@@ -210,6 +242,7 @@ export default {
       logger.info('🎬 视频开始加载')
       this.isLoading = true
       this.hasError = false
+      this.canPlayReady = false
       this.loadingText = '正在加载视频...'
       this.$emit('loadstart')
     },
@@ -234,6 +267,16 @@ export default {
     handleCanPlay() {
       logger.info('🎬 视频可以播放')
       this.isLoading = false
+      this.canPlayReady = true
+      this.loadingText = '准备播放...'
+      
+      // 如果设置了自动播放且还没有开始播放，则开始播放
+      if (this.autoplay && !this.isPlaying) {
+        this.$nextTick(() => {
+          this.play()
+        })
+      }
+      
       this.$emit('canplay')
     },
 
@@ -242,6 +285,8 @@ export default {
       logger.info('🎬 视频开始播放')
       this.isPlaying = true
       this.hasError = false
+      this.isLoading = false // 确保播放时清除加载状态
+      this.canPlayReady = true
       this.$emit('play')
     },
 
@@ -278,7 +323,11 @@ export default {
     // 处理等待缓冲
     handleWaiting() {
       logger.debug('🎬 视频等待缓冲')
-      this.loadingText = '正在缓冲...'
+      // 只有在已经可以播放的情况下才显示缓冲状态
+      if (this.canPlayReady) {
+        this.isLoading = true
+        this.loadingText = '正在缓冲...'
+      }
       this.$emit('waiting')
     },
 
@@ -293,8 +342,8 @@ export default {
       if (this.retryCount < this.maxRetries) {
         this.retryCount++
         logger.info(`🎬 重试播放视频 (${this.retryCount}/${this.maxRetries})`)
-        this.hasError = false
-        this.isLoading = true
+        this.resetState()
+        this.startLoading()
         this.loadingText = '正在重试...'
         
         // 重新设置视频源
@@ -345,6 +394,28 @@ export default {
       this.cleanup()
     },
 
+    // 开始加载
+    startLoading() {
+      logger.info('🎬 开始加载视频')
+      this.isLoading = true
+      this.hasError = false
+      this.canPlayReady = false
+      this.loadingText = '正在加载视频...'
+    },
+
+    // 重置状态
+    resetState() {
+      logger.info('🎬 重置视频播放器状态')
+      this.isPlaying = false
+      this.isLoading = false
+      this.hasError = false
+      this.canPlayReady = false
+      this.currentTime = 0
+      this.duration = 0
+      this.retryCount = 0
+      this.errorMessage = ''
+    },
+
     // 清理资源
     cleanup() {
       logger.info('🎬 清理视频播放器资源')
@@ -353,12 +424,7 @@ export default {
       this.stop()
 
       // 重置状态
-      this.isPlaying = false
-      this.isLoading = false
-      this.hasError = false
-      this.currentTime = 0
-      this.duration = 0
-      this.retryCount = 0
+      this.resetState()
 
       logger.info('🎬 视频播放器资源清理完成')
     },
@@ -556,5 +622,32 @@ export default {
   0% { opacity: 0; }
   50% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+/* 调试信息样式 */
+.debug-info {
+  position: absolute;
+  top: 20rpx;
+  right: 20rpx;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 10rpx;
+  padding: 20rpx;
+  z-index: 100;
+  max-width: 300rpx;
+}
+
+.debug-title {
+  color: #4CAF50;
+  font-size: 24rpx;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.debug-item {
+  color: #ffffff;
+  font-size: 20rpx;
+  display: block;
+  margin-bottom: 5rpx;
 }
 </style>

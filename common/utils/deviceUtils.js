@@ -187,7 +187,155 @@ export class DeviceUtils {
       }
     }
   }
-  
+
+  /**
+   * 获取屏幕方向信息
+   */
+  static async getScreenOrientation() {
+    try {
+      const systemInfo = await this.getSystemInfo()
+      const { screenWidth, screenHeight } = systemInfo
+      
+      // 判断屏幕方向
+      const isLandscape = screenWidth > screenHeight
+      const aspectRatio = screenWidth / screenHeight
+      
+      return {
+        isLandscape,
+        isPortrait: !isLandscape,
+        aspectRatio,
+        screenWidth,
+        screenHeight,
+        orientation: isLandscape ? 'landscape' : 'portrait'
+      }
+    } catch (error) {
+      console.error('获取屏幕方向失败:', error)
+      return {
+        isLandscape: true, // 默认横屏
+        isPortrait: false,
+        aspectRatio: 16/9,
+        screenWidth: 1920,
+        screenHeight: 1080,
+        orientation: 'landscape'
+      }
+    }
+  }
+
+  /**
+   * 检测设备的最佳应用方向
+   */
+  static async detectOptimalAppOrientation() {
+    try {
+      const systemInfo = await this.getSystemInfo()
+      const { screenWidth, screenHeight, platform, brand, model } = systemInfo
+      
+      // 判断是否为TV设备
+      const isTV = this.isTelevisionDevice(systemInfo)
+      
+      // 获取当前屏幕方向信息
+      const orientationInfo = await this.getScreenOrientation()
+      
+      console.log('设备信息:', {
+        platform,
+        brand,
+        model,
+        screenWidth,
+        screenHeight,
+        isTV,
+        currentOrientation: orientationInfo.orientation
+      })
+      
+      // TV设备和大屏设备通常适合横屏应用
+      if (isTV || screenWidth >= 1280) {
+        console.log('检测到TV/大屏设备，应用应使用横屏布局')
+        return 'landscape'
+      } else {
+        // 其他设备根据实际屏幕尺寸判断
+        if (screenWidth > screenHeight) {
+          console.log('检测到横屏设备，应用使用横屏布局')
+          return 'landscape'
+        } else {
+          console.log('检测到竖屏设备，应用使用竖屏布局')
+          return 'portrait'
+        }
+      }
+    } catch (error) {
+      console.error('检测最佳应用方向失败:', error)
+      return 'landscape' // 默认横屏，适合TV应用
+    }
+  }
+
+  /**
+   * 判断是否为电视设备
+   */
+  static isTelevisionDevice(systemInfo) {
+    const { platform, brand, model, screenWidth, screenHeight, system } = systemInfo
+    
+    // 根据平台判断
+    if (platform === 'android') {
+      // Android TV的特征
+      if (brand && (
+        brand.toLowerCase().includes('tv') ||
+        brand.toLowerCase().includes('android tv') ||
+        brand.toLowerCase().includes('smart tv') ||
+        brand.toLowerCase().includes('xiaomi') ||
+        brand.toLowerCase().includes('sony') ||
+        brand.toLowerCase().includes('samsung') ||
+        brand.toLowerCase().includes('lg') ||
+        brand.toLowerCase().includes('tcl') ||
+        brand.toLowerCase().includes('hisense') ||
+        brand.toLowerCase().includes('changhong') ||
+        brand.toLowerCase().includes('skyworth') ||
+        brand.toLowerCase().includes('coocaa') ||
+        brand.toLowerCase().includes('konka') ||
+        brand.toLowerCase().includes('haier')
+      )) {
+        return true
+      }
+      
+      // 根据型号判断
+      if (model && (
+        model.toLowerCase().includes('tv') ||
+        model.toLowerCase().includes('box') ||
+        model.toLowerCase().includes('stick') ||
+        model.toLowerCase().includes('cast') ||
+        model.toLowerCase().includes('fire') ||
+        model.toLowerCase().includes('roku') ||
+        model.toLowerCase().includes('apple tv') ||
+        model.toLowerCase().includes('android tv')
+      )) {
+        return true
+      }
+      
+      // 根据系统版本判断
+      if (system && (
+        system.toLowerCase().includes('android tv') ||
+        system.toLowerCase().includes('google tv')
+      )) {
+        return true
+      }
+    }
+    
+    // 根据屏幕尺寸判断（大屏幕通常是TV）
+    if (screenWidth >= 1280 && screenHeight >= 720) {
+      const aspectRatio = screenWidth / screenHeight
+      // 常见的TV分辨率比例
+      if (Math.abs(aspectRatio - 16/9) < 0.2 || Math.abs(aspectRatio - 4/3) < 0.2) {
+        // 如果是常见TV分辨率且屏幕足够大，很可能是TV
+        if (screenWidth >= 1920 || screenHeight >= 1080) {
+          return true
+        }
+      }
+    }
+    
+    // 特殊判断：如果屏幕非常大，很可能是TV
+    if (screenWidth >= 2560 || screenHeight >= 1440) {
+      return true
+    }
+    
+    return false
+  }
+
   /**
    * 获取应用信息
    */

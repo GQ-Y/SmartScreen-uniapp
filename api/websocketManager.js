@@ -58,9 +58,7 @@ export class WebSocketManager {
   async init() {
     try {
       this.deviceInfo = await DeviceUtils.getDeviceInfo()
-      this.logger.info('WebSocket管理器初始化完成', this.deviceInfo)
     } catch (error) {
-      this.logger.error('WebSocket管理器初始化失败', error)
     }
   }
   
@@ -70,12 +68,10 @@ export class WebSocketManager {
   connect(url = null) {
     if (this.connectionStatus === CONNECTION_STATUS.CONNECTING || 
         this.connectionStatus === CONNECTION_STATUS.CONNECTED) {
-      this.logger.warn('WebSocket已连接或正在连接中')
       return
     }
     
     const wsUrl = url || this.getWebSocketUrl()
-    this.logger.info('开始连接WebSocket', wsUrl)
     
     this.setConnectionStatus(CONNECTION_STATUS.CONNECTING)
     
@@ -83,10 +79,8 @@ export class WebSocketManager {
       this.socket = uni.connectSocket({
         url: wsUrl,
         success: () => {
-          this.logger.info('WebSocket连接请求发送成功')
         },
         fail: (error) => {
-          this.logger.error('WebSocket连接请求失败', error)
           this.handleConnectionError(error)
         }
       })
@@ -95,7 +89,6 @@ export class WebSocketManager {
       this.startConnectionTimeout()
       
     } catch (error) {
-      this.logger.error('创建WebSocket连接失败', error)
       this.handleConnectionError(error)
     }
   }
@@ -108,7 +101,6 @@ export class WebSocketManager {
     
     // 连接打开
     this.socket.onOpen(() => {
-      this.logger.info('WebSocket连接已建立')
       this.clearConnectionTimeout()
       this.setConnectionStatus(CONNECTION_STATUS.CONNECTED)
       this.reconnectAttempts = 0
@@ -186,7 +178,6 @@ export class WebSocketManager {
    */
   sendMessage(message) {
     if (this.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
-      this.logger.warn('WebSocket未连接，消息加入队列:', JSON.stringify(message, null, 2))
       this.messageQueue.push(message)
       return false
     }
@@ -200,7 +191,6 @@ export class WebSocketManager {
           this.logger.info('消息发送成功')
         },
         fail: (error) => {
-          this.logger.error('消息发送失败:', error)
           this.logger.error('失败的消息内容:', JSON.stringify(message, null, 2))
           // 重新加入队列
           this.messageQueue.unshift(message)
@@ -246,14 +236,12 @@ export class WebSocketManager {
         DeviceUtils.saveDeviceConfig(config)
       }
       
-      this.logger.info(`设备注册成功，激活状态: ${this.isActive}`)
       
       // 如果已激活，获取内容
       if (this.isActive) {
         this.getContent()
       }
     } else {
-      this.logger.error('设备注册失败', message.msg)
     }
   }
   
@@ -385,7 +373,6 @@ export class WebSocketManager {
    * 断开连接
    */
   disconnect() {
-    this.logger.info('主动断开WebSocket连接')
 
     this.stopReconnect()
     this.stopHeartbeat()
@@ -419,7 +406,6 @@ export class WebSocketManager {
     this.clearConnectionTimeout()
 
     this.connectionTimer = setTimeout(() => {
-      this.logger.error('WebSocket连接超时')
       this.handleConnectionError(new Error('连接超时'))
     }, WEBSOCKET_CONFIG.CONNECTION_TIMEOUT)
   }
@@ -441,7 +427,6 @@ export class WebSocketManager {
     if (this.connectionStatus !== status) {
       const oldStatus = this.connectionStatus
       this.connectionStatus = status
-      this.logger.info(`连接状态变更: ${oldStatus} -> ${status}`)
       this.triggerEvent('onStatusChange', { oldStatus, newStatus: status })
     }
   }
@@ -455,7 +440,6 @@ export class WebSocketManager {
     }
 
     this.isProcessingQueue = true
-    this.logger.info(`开始处理消息队列，共${this.messageQueue.length}条消息`)
 
     while (this.messageQueue.length > 0 &&
            this.connectionStatus === CONNECTION_STATUS.CONNECTED) {

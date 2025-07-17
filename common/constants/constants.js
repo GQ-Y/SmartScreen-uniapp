@@ -8,7 +8,7 @@ export const WEBSOCKET_CONFIG = {
   DEFAULT_PORT: 9502,
   DEFAULT_URL: 'ws://localhost:9502/ws',
   RECONNECT_INTERVAL: 3000, // 重连间隔(ms)
-  MAX_RECONNECT_ATTEMPTS: 10, // 最大重连次数
+  MAX_RECONNECT_ATTEMPTS: 10, // 最大重连次数 (已弃用，现在使用永久重连策略)
   HEARTBEAT_INTERVAL: 30000, // 心跳间隔(ms)
   CONNECTION_TIMEOUT: 10000 // 连接超时(ms)
 }

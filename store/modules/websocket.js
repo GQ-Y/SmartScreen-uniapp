@@ -105,6 +105,29 @@ const getters = {
     })
 
     return hasData
+  },
+
+  // 获取重连状态详情
+  getReconnectInfo: state => {
+    if (!state.manager) {
+      return {
+        enabled: false,
+        attempts: 0,
+        perpetual: false,
+        nextDelay: 0
+      }
+    }
+
+    const stats = state.manager.getStats()
+    return {
+      enabled: state.connectionStatus === CONNECTION_STATUS.RECONNECTING,
+      attempts: state.reconnectAttempts,
+      perpetual: stats.perpetualReconnect || false,
+      nextDelay: stats.nextReconnectDelay || 0,
+      phase: state.reconnectAttempts <= 10 ? 'initial' : 
+             state.reconnectAttempts <= 20 ? 'medium' : 
+             state.reconnectAttempts <= 50 ? 'extended' : 'long-term'
+    }
   }
 }
 

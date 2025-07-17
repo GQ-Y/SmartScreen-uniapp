@@ -349,20 +349,41 @@ export class WebSocketManager {
    * 安排重连
    */
   scheduleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      this.logger.error('达到最大重连次数，停止重连')
-      return
-    }
-
+    // 移除最大重连次数限制，始终保持重连
+    // 但在超过一定次数后使用更长的重连间隔
     this.reconnectAttempts++
     this.setConnectionStatus(CONNECTION_STATUS.RECONNECTING)
 
-    const delay = Math.min(
-      WEBSOCKET_CONFIG.RECONNECT_INTERVAL * Math.pow(2, this.reconnectAttempts - 1),
-      30000
-    )
+    // 计算重连延迟 - 使用智能退避策略
+    let delay
+    if (this.reconnectAttempts <= 10) {
+      // 前10次使用指数退避策略，最大30秒
+      delay = Math.min(
+        WEBSOCKET_CONFIG.RECONNECT_INTERVAL * Math.pow(2, this.reconnectAttempts - 1),
+        30000
+      )
+    } else if (this.reconnectAttempts <= 20) {
+      // 11-20次使用1分钟间隔
+      delay = 60000
+    } else if (this.reconnectAttempts <= 50) {
+      // 21-50次使用3分钟间隔
+      delay = 180000
+    } else {
+      // 超过50次使用5分钟间隔，但永不停止重连
+      delay = 300000
+    }
 
-    this.logger.info(`${delay}ms后进行第${this.reconnectAttempts}次重连`)
+    // 根据重连次数提供不同级别的日志信息
+    if (this.reconnectAttempts <= 10) {
+      this.logger.info(`${delay}ms后进行第${this.reconnectAttempts}次重连`)
+    } else if (this.reconnectAttempts <= 20) {
+      this.logger.warn(`网络可能存在问题，${delay}ms后进行第${this.reconnectAttempts}次重连`)
+    } else if (this.reconnectAttempts === 21) {
+      this.logger.warn(`长时间无法连接服务器，已尝试${this.reconnectAttempts}次，将使用更长间隔继续重连`)
+    } else if (this.reconnectAttempts % 10 === 0) {
+      // 每10次记录一次日志，避免日志过多
+      this.logger.warn(`持续重连中，已尝试${this.reconnectAttempts}次，${delay}ms后继续`)
+    }
 
     this.reconnectTimer = setTimeout(() => {
       this.connect()
@@ -390,13 +411,22 @@ export class WebSocketManager {
 
   /**
    * 停止重连
+   * @param {boolean} resetCounter - 是否重置重连计数器，默认为true
    */
-  stopReconnect() {
+  stopReconnect(resetCounter = true) {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    this.reconnectAttempts = 0
+    
+    // 只有在主动断开连接时才重置计数器
+    // 重连失败时不重置，保持重连策略的延迟递增
+    if (resetCounter) {
+      this.reconnectAttempts = 0
+      this.logger.info('重连计数器已重置')
+    } else {
+      this.logger.info('停止重连但保持计数器状态')
+    }
   }
 
   /**
@@ -523,9 +553,30 @@ export class WebSocketManager {
       isRegistered: this.isRegistered,
       isActive: this.isActive,
       reconnectAttempts: this.reconnectAttempts,
-      maxReconnectAttempts: this.maxReconnectAttempts,
+      maxReconnectAttempts: this.maxReconnectAttempts, // 保留用于向后兼容
+      perpetualReconnect: true, // 新增：标识启用了永久重连
       messageQueueLength: this.messageQueue.length,
-      deviceInfo: this.deviceInfo
+      deviceInfo: this.deviceInfo,
+      nextReconnectDelay: this.getNextReconnectDelay() // 新增：下次重连延迟
+    }
+  }
+
+  /**
+   * 获取下次重连延迟时间
+   */
+  getNextReconnectDelay() {
+    const attempts = this.reconnectAttempts
+    if (attempts <= 10) {
+      return Math.min(
+        WEBSOCKET_CONFIG.RECONNECT_INTERVAL * Math.pow(2, attempts),
+        30000
+      )
+    } else if (attempts <= 20) {
+      return 60000
+    } else if (attempts <= 50) {
+      return 180000
+    } else {
+      return 300000
     }
   }
 

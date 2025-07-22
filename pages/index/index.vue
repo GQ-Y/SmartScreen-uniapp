@@ -1,5 +1,5 @@
 <template>
-  <view class="smart-screen-container">
+  <view class="smart-screen-container" :class="containerClasses">
     <!-- 主内容区域 -->
     <view class="main-content">
       <!-- 直接显示内容 -->
@@ -33,7 +33,7 @@
           :autoplay="true"
           :show-controls="false"
           :loop="true"
-          :muted="true"
+          :muted="false"
           :show-progress="false"
           :show-info="true"
           :show-play-indicator="false"
@@ -57,7 +57,7 @@
           :autoplay="true"
           :show-controls="false"
           :loop="true"
-          :muted="true"
+          :muted="false"
           :show-progress="false"
           :show-info="true"
           :show-play-indicator="false"
@@ -344,6 +344,25 @@ export default {
       }
 
       return null
+    },
+
+    // 容器样式类
+    containerClasses() {
+      const classes = []
+      
+      if (this.deviceInfo.orientation) {
+        classes.push(`orientation-${this.deviceInfo.orientation}`)
+      }
+      
+      if (this.deviceInfo.isTV) {
+        classes.push('device-tv')
+      }
+      
+      if (this.deviceInfo.screenSize) {
+        classes.push(`screen-${this.deviceInfo.screenSize}`)
+      }
+      
+      return classes
     },
 
     // 动态样式变量
@@ -644,17 +663,11 @@ export default {
     // 应用方向样式
     applyOrientationStyles(orientation) {
       try {
-        // 获取应用容器元素
-        const appContainer = document.querySelector('.smart-screen-container')
-        if (appContainer) {
-          // 移除所有方向类
-          appContainer.classList.remove('orientation-landscape', 'orientation-portrait')
-          
-          // 添加当前方向类
-          appContainer.classList.add(`orientation-${orientation}`)
-          
-          logger.info('应用方向样式已应用:', orientation)
-        }
+        // 在uni-app中，直接通过Vue组件实例来处理样式
+        // 不直接操作DOM，而是通过data属性来控制样式类
+        this.deviceInfo.orientation = orientation
+        
+        logger.info('应用方向样式已应用:', orientation)
         
         // 同时应用动态样式
         this.applyDynamicStyles()
@@ -667,14 +680,13 @@ export default {
     // 应用动态样式
     applyDynamicStyles() {
       try {
-        const rootElement = document.documentElement || document.body
-        if (rootElement && rootElement.style) {
-          Object.keys(this.dynamicStyles).forEach(key => {
-            rootElement.style.setProperty(key, this.dynamicStyles[key])
-          })
-          
-          logger.info('动态样式已应用:', this.dynamicStyles)
-        }
+        // 在uni-app中，CSS变量需要通过其他方式设置
+        // 这里只记录样式信息，实际样式通过computed属性和class绑定实现
+        logger.info('动态样式计算完成:', this.dynamicStyles)
+        
+        // 可以通过uni.setStorage保存样式信息供其他组件使用
+        uni.setStorageSync('dynamicStyles', this.dynamicStyles)
+        
       } catch (error) {
         logger.error('应用动态样式失败:', error)
       }
@@ -1074,11 +1086,6 @@ export default {
           duration: newContent?.duration || 0,
           isTemporary: this.isTemporaryContent(newContent)
         })
-
-        // 如果有旧内容，先停止它
-        if (oldContent) {
-          this.stopCurrentContent(oldContent)
-        }
 
         // 如果有新内容，开始播放
         if (newContent) {

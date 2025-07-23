@@ -103,7 +103,11 @@
 
     <!-- 加载遮罩 -->
     <view class="loading-overlay" v-if="isLoading">
-      <text class="loading-text">{{ loadingText }}</text>
+      <view class="loading-content">
+        <!-- 可选LOGO -->
+        <!-- <image class="loading-logo" src="/static/logo.png" mode="aspectFit" /> -->
+        <text class="loading-text">{{ loadingText }}</text>
+      </view>
     </view>
   </view>
 </template>
@@ -135,7 +139,7 @@ export default {
       currentTime: '',
       timeTimer: null,
       isLoading: false,
-      loadingText: '正在初始化...',
+      loadingText: '精彩内容马上呈现，请稍候...',
 
       // 内容类型常量
       CONTENT_TYPES,
@@ -1064,18 +1068,14 @@ export default {
 
     // 处理内容变化 - 确保旧内容被正确停止
     handleContentChange(newContent, oldContent) {
-      // 先清除之前的计时器
       this.clearDurationTimer()
-      
-      // 检查内容是否真正发生变化（基于ID和URL而不是对象引用）
       const oldId = oldContent?.id
       const newId = newContent?.id
       const oldUrl = oldContent?.content_url
       const newUrl = newContent?.content_url
-      
       const hasContentChanged = oldId !== newId || oldUrl !== newUrl
-      
-      // 只在真正有内容变化时打印日志和处理
+      const oldType = oldContent?.content_type
+      const newType = newContent?.content_type
       if (hasContentChanged) {
         logger.info('内容切换:', {
           fromId: oldId,
@@ -1086,10 +1086,33 @@ export default {
           duration: newContent?.duration || 0,
           isTemporary: this.isTemporaryContent(newContent)
         })
-
-        // 如果有新内容，开始播放
-        if (newContent) {
-          this.startNewContent(newContent)
+        if (oldType !== newType && oldContent) {
+          this.stopCurrentContent(oldContent)
+          // 显示加载中遮罩
+          this.isLoading = true
+          this.loadingText = '正在切换内容...'
+          // 先渲染空内容，强制重绘
+          this.$store.commit('websocket/SET_CONTENT_DATA', {
+            ...this.getContentData,
+            data: {
+              ...this.getContentData.data,
+              primary_contents: [],
+              direct_content: null
+            }
+          })
+          setTimeout(async () => {
+            await this.$nextTick()
+            setTimeout(() => {
+              if (newContent) {
+                this.startNewContent(newContent)
+                // 不再在这里关闭 isLoading，等内容真正加载后再关闭
+              }
+            }, 200)
+          }, 100)
+        } else {
+          if (newContent) {
+            this.startNewContent(newContent)
+          }
         }
       }
     },
@@ -1218,6 +1241,8 @@ export default {
 
     // 处理内容加载成功
     handleContentLoad() {
+      // 内容加载成功，关闭加载中遮罩
+      this.isLoading = false
       // 内容加载成功，无需打印日志
     },
 
@@ -1636,18 +1661,40 @@ export default {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.8);
+  /* 更鲜明的双色渐变 */
+  background: linear-gradient(135deg, #4f8cff 0%, #a259ff 100%);
+  /* 可选：加模糊 */
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  transition: background 0.3s;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 可选LOGO/icon */
+.loading-logo {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 32px;
+  opacity: 0.92;
 }
 
 .loading-text {
-  font-size: 32px;
-  color: #ffffff;
-  font-weight: 600;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  font-size: 28px;
+  color: #fff;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  margin-top: 8px;
+  margin-bottom: 0;
   text-align: center;
 }
 
@@ -1656,11 +1703,9 @@ export default {
   .main-status-text {
     font-size: 42px;
   }
-  
   .loading-text {
-    font-size: 36px;
+    font-size: 44px;
   }
-  
   .unknown-content-text {
     font-size: 36px;
   }
@@ -1671,15 +1716,12 @@ export default {
   .main-status-text {
     font-size: 48px;
   }
-  
   .loading-text {
-    font-size: 42px;
+    font-size: 52px;
   }
-  
   .unknown-content-text {
     font-size: 42px;
   }
-  
   .center-status {
     padding: 80px;
   }
@@ -1690,15 +1732,12 @@ export default {
   .main-status-text {
     font-size: 56px;
   }
-  
   .loading-text {
-    font-size: 48px;
+    font-size: 60px;
   }
-  
   .unknown-content-text {
     font-size: 48px;
   }
-  
   .center-status {
     padding: 100px;
   }

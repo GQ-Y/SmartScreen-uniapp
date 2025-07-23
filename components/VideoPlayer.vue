@@ -348,8 +348,8 @@ export default {
         
         // 重新设置视频源
         this.$nextTick(() => {
-          const videoContext = uni.createVideoContext(this.videoId, this)
-          if (videoContext) {
+          const videoContext = uni.createVideoContext && uni.createVideoContext(this.videoId, this)
+          if (videoContext && typeof videoContext.play === 'function') {
             videoContext.play()
           }
         })
@@ -431,16 +431,16 @@ export default {
 
     // 公共方法：播放
     play() {
-      const videoContext = uni.createVideoContext(this.videoId, this)
-      if (videoContext) {
+      const videoContext = uni.createVideoContext && uni.createVideoContext(this.videoId, this)
+      if (videoContext && typeof videoContext.play === 'function') {
         videoContext.play()
       }
     },
 
     // 公共方法：暂停
     pause() {
-      const videoContext = uni.createVideoContext(this.videoId, this)
-      if (videoContext) {
+      const videoContext = uni.createVideoContext && uni.createVideoContext(this.videoId, this)
+      if (videoContext && typeof videoContext.pause === 'function') {
         videoContext.pause()
       }
     },
@@ -448,15 +448,14 @@ export default {
     // 公共方法：停止
     stop() {
       try {
-        const videoContext = uni.createVideoContext(this.videoId, this)
-        if (videoContext) {
+        const videoContext = uni.createVideoContext && uni.createVideoContext(this.videoId, this)
+        if (videoContext && typeof videoContext.stop === 'function') {
           videoContext.stop()
           logger.info('🎬 视频播放已停止')
         }
       } catch (error) {
         logger.warn('🎬 停止视频播放时出错:', error)
       }
-
       // 更新状态
       this.isPlaying = false
       this.currentTime = 0
@@ -464,8 +463,8 @@ export default {
 
     // 公共方法：跳转到指定时间
     seek(time) {
-      const videoContext = uni.createVideoContext(this.videoId, this)
-      if (videoContext) {
+      const videoContext = uni.createVideoContext && uni.createVideoContext(this.videoId, this)
+      if (videoContext && typeof videoContext.seek === 'function') {
         videoContext.seek(time)
       }
     }

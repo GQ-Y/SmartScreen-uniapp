@@ -262,7 +262,7 @@ export default {
         this.loadingText = '正在加载音频...'
 
         // 创建音频上下文
-        this.audioContext = uni.createInnerAudioContext()
+        this.audioContext = uni.createInnerAudioContext && uni.createInnerAudioContext()
 
         if (!this.audioContext) {
           throw new Error('无法创建音频上下文')
@@ -565,21 +565,21 @@ export default {
 
     // 公共方法：播放
     play() {
-      if (this.audioContext) {
+      if (this.audioContext && typeof this.audioContext.play === 'function') {
         this.audioContext.play()
       }
     },
 
     // 公共方法：暂停
     pause() {
-      if (this.audioContext) {
+      if (this.audioContext && typeof this.audioContext.pause === 'function') {
         this.audioContext.pause()
       }
     },
 
     // 公共方法：停止
     stop() {
-      if (this.audioContext) {
+      if (this.audioContext && typeof this.audioContext.stop === 'function') {
         try {
           this.audioContext.stop()
           this.isPlaying = false
@@ -592,7 +592,7 @@ export default {
 
     // 公共方法：跳转到指定时间
     seek(time) {
-      if (this.audioContext) {
+      if (this.audioContext && typeof this.audioContext.seek === 'function') {
         this.audioContext.seek(time)
       }
     }

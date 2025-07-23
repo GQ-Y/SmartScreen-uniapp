@@ -156,8 +156,8 @@ export default {
       if (this._isBeingDestroyed) return
       this.$nextTick(() => {
         if (this._isBeingDestroyed) return
-        const videoContext = uni.createVideoContext('videoPlayer', this)
-        if (videoContext) {
+        const videoContext = uni.createVideoContext && uni.createVideoContext('videoPlayer', this)
+        if (videoContext && typeof videoContext.play === 'function') {
           videoContext.play().catch(error => {
             if (!this._isBeingDestroyed) {
               logger.warn('播放被阻止:', error.message)
@@ -171,8 +171,8 @@ export default {
     },
     
     pause() {
-      const videoContext = uni.createVideoContext('videoPlayer', this)
-      if (videoContext) {
+      const videoContext = uni.createVideoContext && uni.createVideoContext('videoPlayer', this)
+      if (videoContext && typeof videoContext.pause === 'function') {
         videoContext.pause()
       }
     },
@@ -314,8 +314,8 @@ export default {
     },
     
     attemptAutoPlay() {
-      const videoContext = uni.createVideoContext('videoPlayer', this)
-      if (videoContext) {
+      const videoContext = uni.createVideoContext && uni.createVideoContext('videoPlayer', this)
+      if (videoContext && typeof videoContext.play === 'function') {
         videoContext.play().catch(error => {
           if (error.name === 'NotAllowedError') {
             this.isLoading = false

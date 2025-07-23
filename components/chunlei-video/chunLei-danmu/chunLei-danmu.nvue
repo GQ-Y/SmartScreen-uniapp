@@ -82,7 +82,11 @@
 					if(item.attr.id == id){
 						el = item
 					}
-					
+				}
+				// 防御性判断，防止el为null
+				if (!el || !animation || typeof animation.transition !== 'function') {
+					if (typeof fn === 'function') fn()
+					return
 				}
 				animation.transition(el, {
 					styles: {

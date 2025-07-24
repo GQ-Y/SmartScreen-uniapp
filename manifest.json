@@ -1,8 +1,8 @@
-	{
+{
     "name" : "智慧屏",
     "appid" : "__UNI__C6167FE",
     "description" : "",
-    "versionName" : "1.0.0",
+    "versionName" : "1.0.1",
     "versionCode" : "100",
     "transformPx" : false,
     /* 5+App特有相关 */
@@ -18,7 +18,9 @@
         },
         /* 模块配置 */
         "modules" : {
-            "VideoPlayer" : {}
+            "VideoPlayer" : {},
+            "Webview-x5" : {},
+            "LivePusher" : {}
         },
         /* 应用发布信息 */
         "distribute" : {

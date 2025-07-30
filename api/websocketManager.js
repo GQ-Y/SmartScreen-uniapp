@@ -26,7 +26,7 @@ export class WebSocketManager {
     this.maxReconnectAttempts = WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS
     this.reconnectTimer = null
     this.heartbeatTimer = null
-    this.contentRefreshTimer = null // 添加内容刷新定时器
+    // this.contentRefreshTimer = null // 移除内容刷新定时器
     this.connectionTimer = null
 
     // 设备信息
@@ -304,8 +304,8 @@ export class WebSocketManager {
       this.sendHeartbeat()
     }, WEBSOCKET_CONFIG.HEARTBEAT_INTERVAL)
     
-    // 添加定时获取内容的任务，每分钟执行一次
-    this.startContentRefreshTimer()
+    // 移除定时获取内容的任务
+    // this.startContentRefreshTimer()
   }
   
   /**
@@ -322,24 +322,26 @@ export class WebSocketManager {
    * 开始内容刷新定时器
    */
   startContentRefreshTimer() {
-    this.stopContentRefreshTimer()
-    
-    // 每分钟获取一次内容
-    this.contentRefreshTimer = setInterval(() => {
-      if (this.isRegistered && this.isActive) {
-        this.getContent()
-      }
-    }, 60000) // 60秒 = 1分钟
+    // 移除定时获取内容的功能
+    // this.stopContentRefreshTimer()
+    // 
+    // // 每分钟获取一次内容
+    // this.contentRefreshTimer = setInterval(() => {
+    //   if (this.isRegistered && this.isActive) {
+    //     this.getContent()
+    //   }
+    // }, 60000) // 60秒 = 1分钟
   }
 
   /**
    * 停止内容刷新定时器
    */
   stopContentRefreshTimer() {
-    if (this.contentRefreshTimer) {
-      clearInterval(this.contentRefreshTimer)
-      this.contentRefreshTimer = null
-    }
+    // 移除定时获取内容的功能
+    // if (this.contentRefreshTimer) {
+    //   clearInterval(this.contentRefreshTimer)
+    //   this.contentRefreshTimer = null
+    // }
   }
 
   /**
@@ -348,7 +350,7 @@ export class WebSocketManager {
   handleDisconnection() {
     this.setConnectionStatus(CONNECTION_STATUS.DISCONNECTED)
     this.stopHeartbeat()
-    this.stopContentRefreshTimer() // 停止内容刷新定时器
+    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
     this.isRegistered = false
     this.isActive = false
@@ -365,7 +367,7 @@ export class WebSocketManager {
   handleConnectionError(error) {
     this.setConnectionStatus(CONNECTION_STATUS.ERROR)
     this.stopHeartbeat()
-    this.stopContentRefreshTimer() // 停止内容刷新定时器
+    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
 
     this.triggerEvent('onError', error)
@@ -426,7 +428,7 @@ export class WebSocketManager {
 
     this.stopReconnect()
     this.stopHeartbeat()
-    this.stopContentRefreshTimer() // 停止内容刷新定时器
+    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
 
     if (this.socket) {

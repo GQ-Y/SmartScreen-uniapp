@@ -959,6 +959,9 @@ export default {
       // 只判断类型是否相同，强制每次都切换
       const oldType = oldContent?.content_type
       const newType = newContent?.content_type
+      const oldUrl = oldContent?.content_url
+      const newUrl = newContent?.content_url
+      
       logger.info('内容切换:', {
         fromType: oldType,
         toType: newType,
@@ -968,8 +971,15 @@ export default {
         toUrl: newContent?.content_url || '无'
       })
       
-      if (oldType !== newType && oldContent) {
-        logger.info('类型不同，执行组件销毁重建流程')
+      // 如果类型和URL都相同，跳过处理以避免播放卡住
+      if (oldType === newType && oldUrl === newUrl) {
+        logger.info('类型和URL均相同，跳过处理:', newContent.title)
+        return
+      }
+      
+      // 类型或URL不同，需要重新加载
+      if (oldContent) {
+        logger.info('类型或URL不同，执行组件销毁重建流程')
         this.stopCurrentContent(oldContent)
         this.isLoading = true
         this.loadingText = '精彩内容马上呈现，请稍候...'
@@ -998,7 +1008,7 @@ export default {
         }, 100)
       } else {
         if (newContent) {
-          logger.info('类型相同，直接启动新内容:', newContent.title)
+          logger.info('首次加载内容:', newContent.title)
           this.startNewContent(newContent)
         } else {
           logger.warn('新内容为空，无法启动')
@@ -1336,6 +1346,7 @@ export default {
 
     // 处理停止所有播放器事件
     handleStopAllPlayers() {
+      logger.info('收到stopAllPlayers事件，准备停止所有播放器')
       try {
         // 停止所有类型的内容
         this.stopVideoContent()
@@ -1345,6 +1356,7 @@ export default {
         
         // 清除duration计时器
         this.clearDurationTimer()
+        logger.info('所有播放器已停止')
       } catch (error) {
         logger.error('停止播放器时出错:', error)
       }

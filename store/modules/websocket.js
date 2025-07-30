@@ -404,12 +404,19 @@ const actions = {
         case MESSAGE_TYPES.CONTENT_RESPONSE:
           // 检查是否有实际的内容变化，避免无谓的停止操作
           const currentContentData = state.contentData
+          
+          // 比较关键字段而不是整个对象，避免时间戳等无关字段影响比较结果
           const hasContentChanged = !currentContentData || 
             !currentContentData.data || 
-            JSON.stringify(currentContentData.data) !== JSON.stringify(message.data)
+            !currentContentData.data.primary_contents || 
+            !message.data.primary_contents ||
+            currentContentData.data.primary_contents.length !== message.data.primary_contents.length ||
+            currentContentData.data.primary_contents[0]?.content_type !== message.data.primary_contents[0]?.content_type ||
+            currentContentData.data.primary_contents[0]?.content_url !== message.data.primary_contents[0]?.content_url ||
+            currentContentData.data.primary_contents[0]?.title !== message.data.primary_contents[0]?.title
           
+          // 只有在内容真正发生变化时才停止当前播放的内容
           if (hasContentChanged) {
-            // 先停止当前播放的内容，再设置新内容
             dispatch('stopCurrentContent')
           }
           
@@ -418,14 +425,46 @@ const actions = {
           break
 
         case MESSAGE_TYPES.PUSH_CONTENT:
-          // 先停止当前播放的内容，再处理推送内容
-          dispatch('stopCurrentContent')
+          logger.info('收到推送内容消息，准备处理')
+          // 检查推送的内容是否与当前播放内容相同
+          const currentPushContent = state.contentData?.data?.primary_contents?.[0]
+          const newPushContent = message.data
+          
+          const isSamePushContent = currentPushContent && 
+            currentPushContent.content_type === newPushContent.content_type &&
+            currentPushContent.content_url === newPushContent.content_url &&
+            currentPushContent.title === newPushContent.title
+          
+          // 只有推送内容与当前播放内容不同时才停止播放
+          if (!isSamePushContent) {
+            logger.info('推送内容与当前播放内容不同，停止当前播放')
+            dispatch('stopCurrentContent')
+          } else {
+            logger.info('推送内容与当前播放内容相同，跳过停止操作')
+          }
+          
           dispatch('handlePushContent', message)
           break
 
         case MESSAGE_TYPES.TEMP_CONTENT:
-          // 先停止当前播放的内容，再处理临时内容
-          dispatch('stopCurrentContent')
+          logger.info('收到临时内容消息，准备处理')
+          // 检查临时内容是否与当前播放内容相同
+          const currentTempContent = state.contentData?.data?.primary_contents?.[0]
+          const newTempContent = message.data
+          
+          const isSameTempContent = currentTempContent && 
+            currentTempContent.content_type === newTempContent.content_type &&
+            currentTempContent.content_url === newTempContent.content_url &&
+            currentTempContent.title === newTempContent.title
+          
+          // 只有临时内容与当前播放内容不同时才停止播放
+          if (!isSameTempContent) {
+            logger.info('临时内容与当前播放内容不同，停止当前播放')
+            dispatch('stopCurrentContent')
+          } else {
+            logger.info('临时内容与当前播放内容相同，跳过停止操作')
+          }
+          
           dispatch('handleTempContent', message)
           break
           
@@ -521,13 +560,14 @@ const actions = {
   },
 
   // 停止当前播放的内容
-  stopCurrentContent({ state }) {
+  stopCurrentContent({ state, rootGetters }) {
     try {
       const currentContentData = state.contentData
       if (currentContentData && currentContentData.data) {
-
+        logger.info('准备停止当前播放内容')
         // 通过事件总线通知所有播放器停止
         uni.$emit('stopAllPlayers')
+        logger.info('已发送stopAllPlayers事件')
 
         // 也可以通过 player 模块停止
         // dispatch('player/stop', null, { root: true })

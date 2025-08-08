@@ -5,8 +5,8 @@
 // WebSocket服务器配置
 export const WEBSOCKET_CONFIG = {
   // 服务器地址
-  HOST: '10.24.200.4',
-  // HOST: '192.168.1.100',
+  // HOST: '10.24.200.4',
+  HOST: '192.168.1.100',
   
   // 服务器端口
   PORT: 9502,

@@ -109,10 +109,16 @@ const store = createStore({
       try {
         logger.info('开始初始化应用')
 
-        // 初始化设备信息
-        await dispatch('device/initializeDevice')
+        // 初始化设备信息（如果失败，使用默认值）
+        try {
+          await dispatch('device/initializeDevice')
+          logger.info('设备信息初始化成功')
+        } catch (deviceError) {
+          logger.warn('设备信息初始化失败，使用默认值:', deviceError)
+          // 设备初始化失败不影响整体应用
+        }
 
-        // 初始化WebSocket
+        // 初始化WebSocket（如果失败，应用仍可运行）
         try {
           logger.info('初始化WebSocket管理器')
           await dispatch('websocket/initialize')
@@ -123,11 +129,12 @@ const store = createStore({
             await dispatch('websocket/connect')
             logger.info('WebSocket自动连接成功')
           } catch (connectError) {
-            logger.warn('WebSocket自动连接失败:', connectError)
-            // 连接失败不阻止应用初始化
+            logger.warn('WebSocket自动连接失败，将自动重连:', connectError)
+            // 连接失败不阻止应用初始化，WebSocket会自动重连
           }
         } catch (wsError) {
-          logger.warn('WebSocket初始化失败，但继续应用初始化:', wsError)
+          logger.warn('WebSocket初始化失败，应用将在后台重试:', wsError)
+          // WebSocket初始化失败不影响应用基本功能
         }
 
         commit('SET_INITIALIZED', true)
@@ -135,11 +142,15 @@ const store = createStore({
 
         return true
       } catch (error) {
-        logger.error('应用初始化失败:', error)
+        logger.error('应用初始化过程中发生严重错误:', error)
         commit('SET_GLOBAL_ERROR', error)
-        // 即使初始化失败，也标记为已初始化，避免无限重试
+        
+        // 即使有严重错误，也标记为已初始化，避免无限重试
+        // 但记录错误供用户查看
         commit('SET_INITIALIZED', true)
-        throw error
+        
+        // 不抛出错误，让应用继续运行
+        return false
       }
     },
     

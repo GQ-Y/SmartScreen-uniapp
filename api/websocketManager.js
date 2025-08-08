@@ -16,6 +16,7 @@ import {
 } from '../common/types/messageTypes.js'
 import { DeviceUtils } from '../common/utils/deviceUtils.js'
 import { Logger } from '../common/utils/logger.js'
+import { NetworkUtils } from '../common/utils/networkUtils.js'
 import { WEBSOCKET_CONFIG as WS_CONFIG } from './config.js'
 
 export class WebSocketManager {
@@ -26,13 +27,17 @@ export class WebSocketManager {
     this.maxReconnectAttempts = WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS
     this.reconnectTimer = null
     this.heartbeatTimer = null
-    // this.contentRefreshTimer = null // 移除内容刷新定时器
     this.connectionTimer = null
+    this.networkListener = null
 
     // 设备信息
     this.deviceInfo = null
     this.isRegistered = false
     this.isActive = false
+    
+    // 网络状态
+    this.isNetworkAvailable = true
+    this.lastNetworkCheck = 0
     
     // 事件监听器
     this.eventListeners = {
@@ -59,7 +64,86 @@ export class WebSocketManager {
   async init() {
     try {
       this.deviceInfo = await DeviceUtils.getDeviceInfo()
+      
+      // 设置网络状态监听
+      this.setupNetworkListener()
+      
+      // 初始检查网络状态
+      await this.checkNetworkStatus()
+      
     } catch (error) {
+      this.logger.error('WebSocket管理器初始化失败:', error)
+    }
+  }
+  
+  /**
+   * 设置网络状态监听
+   */
+  setupNetworkListener() {
+    try {
+      // 监听网络状态变化
+      this.networkListener = (networkInfo) => {
+        const wasAvailable = this.isNetworkAvailable
+        this.isNetworkAvailable = networkInfo.isConnected
+        
+        this.logger.info('网络状态变化:', {
+          wasAvailable,
+          isAvailable: this.isNetworkAvailable,
+          networkType: networkInfo.networkType
+        })
+        
+        // 如果网络从不可用变为可用，尝试重连
+        if (!wasAvailable && this.isNetworkAvailable) {
+          this.logger.info('网络恢复，尝试重新连接')
+          this.handleNetworkRecovery()
+        }
+        
+        // 如果网络变为不可用，标记连接状态
+        if (wasAvailable && !this.isNetworkAvailable) {
+          this.logger.warn('网络断开，等待网络恢复')
+          this.setConnectionStatus(CONNECTION_STATUS.ERROR)
+        }
+      }
+      
+      NetworkUtils.onNetworkStatusChange(this.networkListener)
+      this.logger.info('网络状态监听器已设置')
+      
+    } catch (error) {
+      this.logger.error('设置网络状态监听器失败:', error)
+    }
+  }
+  
+  /**
+   * 检查网络状态
+   */
+  async checkNetworkStatus() {
+    try {
+      const networkInfo = await NetworkUtils.checkConnection()
+      this.isNetworkAvailable = networkInfo.isConnected
+      this.lastNetworkCheck = Date.now()
+      
+      this.logger.info('网络状态检查:', {
+        isConnected: networkInfo.isConnected,
+        networkType: networkInfo.networkType
+      })
+      
+      return networkInfo.isConnected
+    } catch (error) {
+      this.logger.error('检查网络状态失败:', error)
+      this.isNetworkAvailable = false
+      return false
+    }
+  }
+  
+  /**
+   * 处理网络恢复
+   */
+  handleNetworkRecovery() {
+    // 如果当前未连接，尝试重连
+    if (this.connectionStatus !== CONNECTION_STATUS.CONNECTED && 
+        this.connectionStatus !== CONNECTION_STATUS.CONNECTING) {
+      this.logger.info('网络恢复，开始重连')
+      this.scheduleReconnect(0) // 立即重连
     }
   }
   
@@ -69,19 +153,30 @@ export class WebSocketManager {
   connect(url = null) {
     if (this.connectionStatus === CONNECTION_STATUS.CONNECTING || 
         this.connectionStatus === CONNECTION_STATUS.CONNECTED) {
+      this.logger.info('WebSocket已在连接中或已连接，跳过连接请求')
+      return
+    }
+    
+    // 检查网络状态
+    if (!this.isNetworkAvailable) {
+      this.logger.warn('网络不可用，延迟连接')
+      this.scheduleReconnect(5000) // 5秒后重试
       return
     }
     
     const wsUrl = url || this.getWebSocketUrl()
     
     this.setConnectionStatus(CONNECTION_STATUS.CONNECTING)
+    this.logger.info('开始连接WebSocket:', wsUrl)
     
     try {
       this.socket = uni.connectSocket({
         url: wsUrl,
         success: () => {
+          this.logger.info('WebSocket连接请求已发送')
         },
         fail: (error) => {
+          this.logger.error('WebSocket连接请求失败:', error)
           this.handleConnectionError(error)
         }
       })
@@ -90,6 +185,7 @@ export class WebSocketManager {
       this.startConnectionTimeout()
       
     } catch (error) {
+      this.logger.error('创建WebSocket连接失败:', error)
       this.handleConnectionError(error)
     }
   }
@@ -98,13 +194,17 @@ export class WebSocketManager {
    * 设置Socket事件处理器
    */
   setupSocketEventHandlers() {
-    if (!this.socket) return
+    if (!this.socket) {
+      this.logger.error('Socket对象不存在，无法设置事件处理器')
+      return
+    }
     
     // 连接打开
     this.socket.onOpen(() => {
       this.clearConnectionTimeout()
       this.setConnectionStatus(CONNECTION_STATUS.CONNECTED)
       this.reconnectAttempts = 0
+      this.logger.info('WebSocket连接已建立')
       this.triggerEvent('onConnect')
       
       // 发送注册消息
@@ -124,13 +224,17 @@ export class WebSocketManager {
     
     // 连接关闭
     this.socket.onClose((res) => {
+      this.logger.info('WebSocket连接已关闭:', res)
       this.handleDisconnection()
     })
     
     // 连接错误
     this.socket.onError((error) => {
+      this.logger.error('WebSocket连接错误:', error)
       this.handleConnectionError(error)
     })
+    
+    this.logger.info('WebSocket事件处理器已设置')
   }
   
   /**
@@ -138,9 +242,8 @@ export class WebSocketManager {
    */
   handleMessage(data) {
     try {
-
       const message = MessageFactory.parseMessage(data)
-      this.logger.info('解析后的WebSocket消息:', JSON.stringify(message, null, 2))
+      this.logger.info('收到WebSocket消息:', message.type)
       this.triggerEvent('onMessage', message)
       
       // 处理特定消息类型
@@ -163,14 +266,14 @@ export class WebSocketManager {
           // 这些消息由外部处理
           break
         case MESSAGE_TYPES.ERROR:
-          this.logger.error('服务器错误消息', message)
+          this.logger.error('服务器错误消息:', message)
           break
         default:
-          this.logger.warn('未知消息类型', message)
+          this.logger.warn('未知消息类型:', message.type)
       }
       
     } catch (error) {
-      this.logger.error('处理WebSocket消息失败', error)
+      this.logger.error('处理WebSocket消息失败:', error)
     }
   }
   
@@ -180,26 +283,27 @@ export class WebSocketManager {
   sendMessage(message) {
     if (this.connectionStatus !== CONNECTION_STATUS.CONNECTED) {
       this.messageQueue.push(message)
+      this.logger.info('连接未建立，消息已加入队列，当前队列长度:', this.messageQueue.length)
       return false
     }
 
     try {
       const data = JSON.stringify(message)
-
+      
       this.socket.send({
         data,
         success: () => {
-          this.logger.info('消息发送成功')
+          this.logger.debug('消息发送成功:', message.type)
         },
         fail: (error) => {
-          this.logger.error('失败的消息内容:', JSON.stringify(message, null, 2))
+          this.logger.error('消息发送失败:', error)
           // 重新加入队列
           this.messageQueue.unshift(message)
         }
       })
       return true
     } catch (error) {
-      this.logger.error('序列化消息失败', error)
+      this.logger.error('序列化消息失败:', error)
       return false
     }
   }
@@ -218,6 +322,11 @@ export class WebSocketManager {
       this.deviceInfo.deviceName
     )
     
+    this.logger.info('发送设备注册消息:', {
+      mac: this.deviceInfo.mac,
+      deviceName: this.deviceInfo.deviceName
+    })
+    
     this.sendMessage(message)
   }
   
@@ -225,6 +334,12 @@ export class WebSocketManager {
    * 处理注册响应
    */
   handleRegisterAck(message) {
+    this.logger.info('收到注册响应:', {
+      success: message.success,
+      active: message.active,
+      deviceId: message.device_id,
+      isNewDevice: message.is_new_device
+    })
 
     if (message.success) {
       this.isRegistered = true
@@ -237,12 +352,17 @@ export class WebSocketManager {
         DeviceUtils.saveDeviceConfig(config)
       }
       
+      this.logger.info('设备注册成功:', {
+        isActive: this.isActive,
+        deviceId: message.device_id
+      })
       
       // 如果已激活，获取内容
       if (this.isActive) {
         this.getContent()
       }
     } else {
+      this.logger.error('设备注册失败:', message.msg)
     }
   }
   
@@ -262,10 +382,15 @@ export class WebSocketManager {
    * 处理心跳响应
    */
   handleHeartbeatAck(message) {
+    this.logger.debug('收到心跳响应:', {
+      success: message.success,
+      active: message.active
+    })
 
     if (message.success) {
       this.isActive = message.active
     } else {
+      this.logger.warn('心跳响应失败:', message.msg)
     }
   }
   
@@ -274,6 +399,10 @@ export class WebSocketManager {
    */
   handleActiveStatus(message) {
     this.isActive = message.active
+    this.logger.info('设备激活状态变更:', {
+      active: this.isActive,
+      message: message.msg
+    })
 
     if (this.isActive) {
       this.getContent()
@@ -287,10 +416,12 @@ export class WebSocketManager {
    */
   getContent() {
     if (!this.deviceInfo || !this.isRegistered) {
+      this.logger.warn('设备未注册，无法获取内容')
       return
     }
     
     const message = new GetContentMessage(this.deviceInfo.mac)
+    this.logger.info('发送获取内容请求')
     this.sendMessage(message)
   }
   
@@ -304,8 +435,7 @@ export class WebSocketManager {
       this.sendHeartbeat()
     }, WEBSOCKET_CONFIG.HEARTBEAT_INTERVAL)
     
-    // 移除定时获取内容的任务
-    // this.startContentRefreshTimer()
+    this.logger.info('心跳定时器已启动，间隔:', WEBSOCKET_CONFIG.HEARTBEAT_INTERVAL)
   }
   
   /**
@@ -315,33 +445,8 @@ export class WebSocketManager {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
+      this.logger.info('心跳定时器已停止')
     }
-  }
-
-  /**
-   * 开始内容刷新定时器
-   */
-  startContentRefreshTimer() {
-    // 移除定时获取内容的功能
-    // this.stopContentRefreshTimer()
-    // 
-    // // 每分钟获取一次内容
-    // this.contentRefreshTimer = setInterval(() => {
-    //   if (this.isRegistered && this.isActive) {
-    //     this.getContent()
-    //   }
-    // }, 60000) // 60秒 = 1分钟
-  }
-
-  /**
-   * 停止内容刷新定时器
-   */
-  stopContentRefreshTimer() {
-    // 移除定时获取内容的功能
-    // if (this.contentRefreshTimer) {
-    //   clearInterval(this.contentRefreshTimer)
-    //   this.contentRefreshTimer = null
-    // }
   }
 
   /**
@@ -350,11 +455,11 @@ export class WebSocketManager {
   handleDisconnection() {
     this.setConnectionStatus(CONNECTION_STATUS.DISCONNECTED)
     this.stopHeartbeat()
-    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
     this.isRegistered = false
     this.isActive = false
 
+    this.logger.info('WebSocket连接已断开，准备重连')
     this.triggerEvent('onDisconnect')
 
     // 自动重连
@@ -367,9 +472,9 @@ export class WebSocketManager {
   handleConnectionError(error) {
     this.setConnectionStatus(CONNECTION_STATUS.ERROR)
     this.stopHeartbeat()
-    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
 
+    this.logger.error('WebSocket连接错误，准备重连:', error)
     this.triggerEvent('onError', error)
 
     // 自动重连
@@ -379,7 +484,16 @@ export class WebSocketManager {
   /**
    * 安排重连
    */
-  scheduleReconnect() {
+  scheduleReconnect(immediateDelay = null) {
+    // 如果网络不可用，延迟重连
+    if (!this.isNetworkAvailable) {
+      this.logger.warn('网络不可用，延迟重连')
+      this.reconnectTimer = setTimeout(() => {
+        this.scheduleReconnect()
+      }, 10000) // 10秒后重试
+      return
+    }
+    
     // 移除最大重连次数限制，始终保持重连
     // 但在超过一定次数后使用更长的重连间隔
     this.reconnectAttempts++
@@ -387,7 +501,9 @@ export class WebSocketManager {
 
     // 计算重连延迟 - 使用智能退避策略
     let delay
-    if (this.reconnectAttempts <= 10) {
+    if (immediateDelay !== null) {
+      delay = immediateDelay
+    } else if (this.reconnectAttempts <= 10) {
       // 前10次使用指数退避策略，最大30秒
       delay = Math.min(
         WEBSOCKET_CONFIG.RECONNECT_INTERVAL * Math.pow(2, this.reconnectAttempts - 1),
@@ -425,10 +541,10 @@ export class WebSocketManager {
    * 断开连接
    */
   disconnect() {
+    this.logger.info('主动断开WebSocket连接')
 
     this.stopReconnect()
     this.stopHeartbeat()
-    // this.stopContentRefreshTimer() // 移除定时获取内容的功能
     this.clearConnectionTimeout()
 
     if (this.socket) {
@@ -468,6 +584,7 @@ export class WebSocketManager {
     this.clearConnectionTimeout()
 
     this.connectionTimer = setTimeout(() => {
+      this.logger.warn('WebSocket连接超时')
       this.handleConnectionError(new Error('连接超时'))
     }, WEBSOCKET_CONFIG.CONNECTION_TIMEOUT)
   }
@@ -489,6 +606,7 @@ export class WebSocketManager {
     if (this.connectionStatus !== status) {
       const oldStatus = this.connectionStatus
       this.connectionStatus = status
+      this.logger.info(`连接状态变更: ${oldStatus} -> ${status}`)
       this.triggerEvent('onStatusChange', { oldStatus, newStatus: status })
     }
   }
@@ -502,6 +620,7 @@ export class WebSocketManager {
     }
 
     this.isProcessingQueue = true
+    this.logger.info('开始处理消息队列，队列长度:', this.messageQueue.length)
 
     while (this.messageQueue.length > 0 &&
            this.connectionStatus === CONNECTION_STATUS.CONNECTED) {
@@ -513,7 +632,7 @@ export class WebSocketManager {
     }
 
     this.isProcessingQueue = false
-    this.logger.info('消息队列处理完成')
+    this.logger.info('消息队列处理完成，剩余队列长度:', this.messageQueue.length)
   }
 
   /**
@@ -523,8 +642,6 @@ export class WebSocketManager {
     // 使用配置文件中的地址和端口
     return WS_CONFIG.getUrl()
   }
-
-
 
   /**
    * 添加事件监听器
@@ -572,7 +689,8 @@ export class WebSocketManager {
       isRegistered: this.isRegistered,
       isActive: this.isActive,
       reconnectAttempts: this.reconnectAttempts,
-      queueLength: this.messageQueue.length
+      queueLength: this.messageQueue.length,
+      isNetworkAvailable: this.isNetworkAvailable
     }
   }
 
@@ -589,6 +707,7 @@ export class WebSocketManager {
       perpetualReconnect: true, // 新增：标识启用了永久重连
       messageQueueLength: this.messageQueue.length,
       deviceInfo: this.deviceInfo,
+      isNetworkAvailable: this.isNetworkAvailable,
       nextReconnectDelay: this.getNextReconnectDelay() // 新增：下次重连延迟
     }
   }
@@ -628,6 +747,14 @@ export class WebSocketManager {
   destroy() {
     this.logger.info('销毁WebSocket管理器')
     this.disconnect()
+    
+    // 清理网络监听器
+    if (this.networkListener) {
+      // 注意：uni.onNetworkStatusChange没有对应的off方法
+      // 这里只是标记清理
+      this.networkListener = null
+    }
+    
     this.eventListeners = {
       onConnect: [],
       onDisconnect: [],

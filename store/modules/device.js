@@ -126,26 +126,76 @@ const actions = {
   // 初始化设备
   async initializeDevice({ commit }) {
     try {
+      logger.info('开始初始化设备信息')
       
-      // 获取设备信息
-      const deviceInfo = await DeviceUtils.getDeviceInfo()
-      commit('SET_DEVICE_INFO', deviceInfo)
+      // 获取设备信息（如果失败，使用默认值）
+      let deviceInfo = null
+      try {
+        deviceInfo = await DeviceUtils.getDeviceInfo()
+        commit('SET_DEVICE_INFO', deviceInfo)
+        logger.info('设备信息获取成功')
+      } catch (deviceError) {
+        logger.warn('设备信息获取失败，使用默认值:', deviceError)
+        // 使用默认设备信息
+        deviceInfo = {
+          mac: '00:00:00:00:00:00',
+          deviceName: 'SmartScreen设备',
+          platform: 'unknown',
+          system: 'unknown',
+          version: '1.0.0',
+          model: 'unknown',
+          brand: 'unknown',
+          screenWidth: 1920,
+          screenHeight: 1080,
+          pixelRatio: 1,
+          windowWidth: 1920,
+          windowHeight: 1080,
+          statusBarHeight: 0,
+          language: 'zh-CN',
+          networkType: 'unknown',
+          isConnected: true
+        }
+        commit('SET_DEVICE_INFO', deviceInfo)
+      }
       
-      // 获取系统信息
-      const systemInfo = await DeviceUtils.getSystemInfo()
-      commit('SET_SYSTEM_INFO', systemInfo)
+      // 获取系统信息（如果失败，使用默认值）
+      try {
+        const systemInfo = await DeviceUtils.getSystemInfo()
+        commit('SET_SYSTEM_INFO', systemInfo)
+        logger.info('系统信息获取成功')
+      } catch (systemError) {
+        logger.warn('系统信息获取失败，使用默认值:', systemError)
+        commit('SET_SYSTEM_INFO', {
+          platform: 'unknown',
+          system: 'unknown',
+          version: '1.0.0'
+        })
+      }
       
-      // 获取应用信息
-      const appInfo = DeviceUtils.getAppInfo()
-      commit('SET_APP_INFO', appInfo)
+      // 获取应用信息（如果失败，使用默认值）
+      try {
+        const appInfo = DeviceUtils.getAppInfo()
+        commit('SET_APP_INFO', appInfo)
+        logger.info('应用信息获取成功')
+      } catch (appError) {
+        logger.warn('应用信息获取失败，使用默认值:', appError)
+        commit('SET_APP_INFO', {
+          name: 'SmartScreen',
+          version: '1.0.0',
+          description: '智慧屏应用'
+        })
+      }
       
       // 设置设备为在线状态
       commit('SET_DEVICE_STATUS', DEVICE_STATUS.ONLINE)
       
+      logger.info('设备初始化完成')
       return true
     } catch (error) {
+      logger.error('设备初始化过程中发生严重错误:', error)
       commit('SET_ERROR', error)
-      throw error
+      // 不抛出错误，让应用继续运行
+      return false
     }
   },
   

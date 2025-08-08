@@ -109,6 +109,76 @@
         <text class="loading-text">{{ loadingText }}</text>
       </view>
     </view>
+    
+    <!-- WebSocket状态显示图层 -->
+    <view class="websocket-status-overlay" v-if="showWebSocketStatus">
+      <view class="websocket-status-content">
+        <view class="status-header">
+          <text class="status-title">WebSocket状态</text>
+          <text class="status-time">{{ currentTime }}</text>
+        </view>
+        
+        <view class="status-grid">
+          <!-- 网络状态 -->
+          <view class="status-item">
+            <text class="status-label">网络:</text>
+            <text class="status-value" :class="networkStatusClass">{{ networkStatusText }}</text>
+          </view>
+          
+          <!-- WebSocket连接状态 -->
+          <view class="status-item">
+            <text class="status-label">连接:</text>
+            <text class="status-value" :class="websocketStatusClass">{{ websocketStatusText }}</text>
+          </view>
+          
+          <!-- 设备注册状态 -->
+          <view class="status-item">
+            <text class="status-label">注册:</text>
+            <text class="status-value" :class="getConnectionStatus.isRegistered ? 'status-connected' : 'status-disconnected'">
+              {{ getConnectionStatus.isRegistered ? '已注册' : '未注册' }}
+            </text>
+          </view>
+          
+          <!-- 设备激活状态 -->
+          <view class="status-item">
+            <text class="status-label">激活:</text>
+            <text class="status-value" :class="getConnectionStatus.isActive ? 'status-connected' : 'status-disconnected'">
+              {{ getConnectionStatus.isActive ? '已激活' : '未激活' }}
+            </text>
+          </view>
+          
+          <!-- 重连次数 -->
+          <view class="status-item">
+            <text class="status-label">重连:</text>
+            <text class="status-value">{{ getConnectionStatus.reconnectAttempts }}</text>
+          </view>
+          
+          <!-- 消息队列长度 -->
+          <view class="status-item">
+            <text class="status-label">队列:</text>
+            <text class="status-value">{{ getConnectionStatus.queueLength }}</text>
+          </view>
+          
+          <!-- 网络类型 -->
+          <view class="status-item">
+            <text class="status-label">类型:</text>
+            <text class="status-value">{{ deviceInfo.networkType || '未知' }}</text>
+          </view>
+          
+          <!-- 服务器地址 -->
+          <view class="status-item">
+            <text class="status-label">服务器:</text>
+            <text class="status-value">{{ websocketServerUrl }}</text>
+          </view>
+        </view>
+        
+        <!-- 错误信息显示 -->
+        <view class="error-section" v-if="getLastError">
+          <text class="error-title">错误信息:</text>
+          <text class="error-message">{{ JSON.stringify(getLastError, null, 2) }}</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -173,7 +243,13 @@ export default {
         '2. 应用将自动连接到服务器',
         '3. 等待设备激活后即可播放内容',
         '4. 使用遥控器进行操作'
-      ]
+      ],
+      
+      // WebSocket状态显示开关
+      showWebSocketStatus: false,
+      
+      // WebSocket状态更新定时器
+      websocketStatusTimer: null
     }
   },
 
@@ -184,8 +260,7 @@ export default {
       'getAppStatus'
     ]),
     ...mapGetters('device', [
-      'getDeviceStatus',
-      'isDeviceOnline'
+      'getDeviceStatus'
     ]),
     ...mapGetters('websocket', [
       'getConnectionStatus',
@@ -205,7 +280,7 @@ export default {
 
     // 网络状态（基于设备在线状态）
     networkStatusClass() {
-      const isOnline = this.isDeviceOnline
+      const isOnline = this.deviceInfo?.isOnline || false
       return {
         'status-connected': isOnline,
         'status-disconnected': !isOnline
@@ -213,15 +288,18 @@ export default {
     },
 
     networkIconName() {
-      return this.isDeviceOnline ? 'wifi' : 'network'
+      const isOnline = this.deviceInfo?.isOnline || false
+      return isOnline ? 'wifi' : 'network'
     },
 
     networkIconColor() {
-      return this.isDeviceOnline ? '#4CAF50' : '#F44336'
+      const isOnline = this.deviceInfo?.isOnline || false
+      return isOnline ? '#4CAF50' : '#F44336'
     },
 
     networkStatusText() {
-      return this.isDeviceOnline ? '网络已连接' : '无网络连接'
+      const isOnline = this.deviceInfo?.isOnline || false
+      return isOnline ? '网络已连接' : '无网络连接'
     },
 
     // WebSocket状态
@@ -262,35 +340,40 @@ export default {
 
     // 主状态
     mainStatusClass() {
-      if (!this.isDeviceOnline) return 'status-offline'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return 'status-offline'
       if (!this.getConnectionStatus.isConnected) return 'status-disconnected'
       if (!this.getConnectionStatus.isActive) return 'status-inactive'
       return 'status-active'
     },
 
     mainStatusIconName() {
-      if (!this.isDeviceOnline) return 'device-offline'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return 'device-offline'
       if (!this.getConnectionStatus.isConnected) return 'device-disconnected'
       if (!this.getConnectionStatus.isActive) return 'device-inactive'
       return 'device-ready'
     },
 
     mainStatusIconColor() {
-      if (!this.isDeviceOnline) return '#9E9E9E'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return '#9E9E9E'
       if (!this.getConnectionStatus.isConnected) return '#F44336'
       if (!this.getConnectionStatus.isActive) return '#FF9800'
       return '#4CAF50'
     },
 
     mainStatusText() {
-      if (!this.isDeviceOnline) return '设备离线'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return '设备离线'
       if (!this.getConnectionStatus.isConnected) return '服务器未连接'
       if (!this.getConnectionStatus.isActive) return '设备未激活'
       return '设备就绪'
     },
 
     subStatusText() {
-      if (!this.isDeviceOnline) return '请检查网络连接'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return '请检查网络连接'
       if (!this.getConnectionStatus.isConnected) return '正在尝试连接服务器'
       if (!this.getConnectionStatus.isActive) return '等待管理员激活设备'
       return '可以接收和播放内容'
@@ -303,7 +386,8 @@ export default {
 
     // 引导文本
     guideText() {
-      if (!this.isDeviceOnline) return '设备配置指南'
+      const isOnline = this.deviceInfo?.isOnline || false
+      if (!isOnline) return '设备配置指南'
       if (!this.getConnectionStatus.isConnected) return '连接配置指南'
       return '设备激活指南'
     },
@@ -427,6 +511,27 @@ export default {
         '--icon-scale': iconScale,
         '--screen-size': screenSize
       }
+    },
+    
+    // WebSocket服务器地址
+    websocketServerUrl() {
+      try {
+        // 从配置中获取服务器地址
+        const { WEBSOCKET_CONFIG } = require('../../api/config.js')
+        return WEBSOCKET_CONFIG.getUrl()
+      } catch (error) {
+        return 'ws://10.24.200.4:9502/ws'
+      }
+    },
+    
+    // 最新错误信息
+    getLastError() {
+      return this.$store.getters['websocket/getLastError']
+    },
+    
+    // 错误历史
+    getErrorHistory() {
+      return this.$store.getters['websocket/getErrorHistory']
     }
   },
 
@@ -446,7 +551,6 @@ export default {
   },
 
   async onLoad() {
-    logger.info('主页面加载')
 
     try {
       this.isLoading = true
@@ -472,6 +576,9 @@ export default {
       // 自动连接WebSocket
       await this.autoConnectWebSocket()
 
+      // 启动WebSocket状态显示定时器
+      this.startWebSocketStatusDisplay()
+
       this.isLoading = false
       logger.info('主页面初始化完成')
 
@@ -479,10 +586,16 @@ export default {
       this.isLoading = false
       logger.error('主页面初始化失败:', error)
 
-      uni.showToast({
-        title: '初始化失败',
-        icon: 'error'
-      })
+      if (error && error.message && (
+        error.message.includes('网络') || 
+        error.message.includes('connection') ||
+        error.message.includes('WebSocket')
+      )) {
+        // 网络相关错误，应用会自动重试，不需要用户干预
+        logger.warn('网络相关错误，应用将自动重试:', error.message)
+      } else {
+        return
+      }
     }
   },
 
@@ -495,6 +608,9 @@ export default {
 
     // 清理事件监听器
     this.cleanupEventListeners()
+    
+    // 清理WebSocket状态显示定时器
+    this.stopWebSocketStatusDisplay()
 
     logger.info('页面卸载，已清理监听器')
   },
@@ -520,6 +636,9 @@ export default {
         // 根据屏幕尺寸分类
         const screenSize = this.getScreenSize(systemInfo.screenWidth, systemInfo.screenHeight)
         
+        // 获取网络状态
+        const networkInfo = await DeviceUtils.checkNetworkConnection()
+        
         this.deviceInfo = {
           screenWidth: systemInfo.screenWidth || 0,
           screenHeight: systemInfo.screenHeight || 0,
@@ -531,7 +650,9 @@ export default {
           model: systemInfo.model || '',
           system: systemInfo.system || '',
           isTV,
-          screenSize
+          screenSize,
+          isOnline: networkInfo.isConnected,
+          networkType: networkInfo.networkType
         }
         
         logger.info('设备信息获取成功:', this.deviceInfo)
@@ -556,7 +677,9 @@ export default {
           model: '',
           system: '',
           isTV: true, // 默认假设是TV端
-          screenSize: 'large'
+          screenSize: 'large',
+          isOnline: true, // 默认假设在线
+          networkType: 'unknown'
         }
         
         // 即使获取失败也要应用默认样式
@@ -880,20 +1003,11 @@ export default {
         await this.connect()
         logger.info('WebSocket自动连接成功')
 
-        // 注释掉重复的getContent调用，WebSocketManager会在注册成功后自动获取内容
-        // setTimeout(async () => {
-        //   try {
-        //     await this.getContent()
-        //     logger.info('自动获取内容成功')
-        //   } catch (error) {
-        //     logger.warn('自动获取内容失败:', error)
-        //   }
-        // }, 1000)
-
       } catch (error) {
-        logger.warn('WebSocket自动连接失败:', error)
+        logger.warn('WebSocket自动连接失败，但不影响应用初始化:', error)
         // 自动连接失败不显示错误提示，避免干扰用户体验
         // 用户可以通过状态指示器看到连接状态
+        // 不重新抛出错误，避免触发onLoad的catch块
       }
     },
 
@@ -1198,8 +1312,6 @@ export default {
         this.handleBack()
       })
 
-
-
       globalKeyHandler.addListener(KEYS.CENTER, () => {
         if (this.isConnected) {
           this.handleRefresh()
@@ -1262,6 +1374,9 @@ export default {
       
       // 监听屏幕方向变化
       this.setupOrientationListener()
+      
+      // 监听网络状态变化
+      this.setupNetworkListener()
       
       logger.info('事件监听器已设置')
     },
@@ -1341,6 +1456,9 @@ export default {
       }
       // #endif
       
+      // 清理网络状态监听
+      this.cleanupNetworkListener()
+      
       logger.info('事件监听器已清理')
     },
 
@@ -1360,6 +1478,43 @@ export default {
       } catch (error) {
         logger.error('停止播放器时出错:', error)
       }
+    },
+
+    // 设置网络状态监听
+    setupNetworkListener() {
+      // 监听网络状态变化
+      uni.onNetworkStatusChange((res) => {
+        logger.info('网络状态发生变化:', res)
+        this.handleNetworkStatusChange(res)
+      })
+      logger.info('网络状态监听器已设置')
+    },
+
+    // 处理网络状态变化
+    handleNetworkStatusChange(res) {
+      logger.info('处理网络状态变化:', res)
+      
+      // 更新设备信息中的网络状态
+      if (this.deviceInfo) {
+        this.deviceInfo.isOnline = res.isConnected
+        this.deviceInfo.networkType = res.networkType
+      }
+      
+      // 重新应用样式以更新网络图标
+      this.applyDynamicStyles()
+      
+      // 如果网络恢复，尝试重新连接WebSocket
+      if (res.isConnected) {
+        logger.info('网络恢复，检查WebSocket连接状态')
+        // 这里可以添加重新连接WebSocket的逻辑
+        // 但WebSocket管理器已经有自己的网络恢复处理
+      }
+    },
+
+    // 清理网络状态监听
+    cleanupNetworkListener() {
+      uni.$off('networkStatusChange', this.handleNetworkStatusChange)
+      logger.info('网络状态监听器已清理')
     },
 
     // 按键处理方法
@@ -1444,6 +1599,55 @@ export default {
       const newVolume = currentVolume > 0 ? 0 : 1.0
       this.$store.dispatch('player/setVolume', newVolume)
       logger.debug('音量控制：静音切换')
+    },
+
+    // WebSocket状态显示相关方法
+    toggleWebSocketStatus() {
+      this.showWebSocketStatus = !this.showWebSocketStatus
+      if (this.showWebSocketStatus) {
+        this.startWebSocketStatusDisplay()
+      } else {
+        this.stopWebSocketStatusDisplay()
+      }
+    },
+
+    refreshWebSocketStatus() {
+      this.$store.dispatch('websocket/refreshStatus')
+    },
+
+    formatErrorTime(timestamp) {
+      const date = new Date(timestamp)
+      return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    },
+    
+    // 启动WebSocket状态显示定时器
+    startWebSocketStatusDisplay() {
+      if (this.websocketStatusTimer) {
+        clearInterval(this.websocketStatusTimer)
+      }
+      
+      this.websocketStatusTimer = setInterval(() => {
+        this.refreshWebSocketStatus()
+      }, 1000) // 每秒刷新一次
+      
+      logger.info('WebSocket状态显示定时器已启动')
+    },
+    
+    // 停止WebSocket状态显示定时器
+    stopWebSocketStatusDisplay() {
+      if (this.websocketStatusTimer) {
+        clearInterval(this.websocketStatusTimer)
+        this.websocketStatusTimer = null
+        logger.info('WebSocket状态显示定时器已停止')
+      }
+    },
+
+    clearErrorHistory() {
+      this.$store.dispatch('websocket/clearErrorHistory')
+      uni.showToast({
+        title: '错误记录已清除',
+        icon: 'success'
+      })
     }
   }
 }
@@ -1580,6 +1784,260 @@ export default {
   text-align: center;
 }
 
+/* WebSocket状态显示图层 */
+.websocket-status-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3); /* 大幅增加透明度 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  z-index: 9998;
+  padding: 20px;
+  box-sizing: border-box;
+  pointer-events: none; /* 不阻挡其他组件的交互 */
+}
+
+.websocket-status-content {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+  padding: 20px;
+  width: 380px;
+  max-height: 600px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  pointer-events: auto; /* 恢复交互 */
+  overflow-y: auto;
+}
+
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.status-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #FF6022;
+}
+
+.status-time {
+  font-size: 12px;
+  color: #ccc;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-label {
+  font-size: 12px;
+  color: #ccc;
+  margin-right: 8px;
+}
+
+.status-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4CAF50;
+}
+
+.status-value.status-connected {
+  color: #4CAF50;
+}
+
+.status-value.status-disconnected {
+  color: #F44336;
+}
+
+.error-section {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #F44336;
+  margin-top: 10px;
+}
+
+.error-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #F44336;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.error-message {
+  font-size: 11px;
+  color: #FF9800;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.2;
+  display: block;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px;
+  border-radius: 2px;
+}
+
+.error-history-section {
+  margin-top: 10px;
+  border-top: 1px solid rgba(244, 67, 54, 0.3);
+  padding-top: 8px;
+}
+
+.error-history-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #F44336;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.error-history-list {
+  max-height: 120px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 152, 0, 0.2);
+}
+
+.error-history-item {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 152, 0, 0.1);
+  margin-bottom: 4px;
+}
+
+.error-history-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.error-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.error-history-time {
+  font-size: 10px;
+  color: #999;
+  margin-right: 8px;
+  display: block;
+}
+
+.error-history-status {
+  font-size: 10px;
+  color: #ccc;
+  display: block;
+}
+
+.error-history-message {
+  font-size: 10px;
+  color: #FF9800;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.2;
+  display: block;
+  max-height: 40px;
+  overflow-y: auto;
+}
+
+.error-actions {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 20px;
+  margin-top: 25px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.action-btn {
+  background: linear-gradient(135deg, #FF6022 0%, #E6511D 100%);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  padding: 12px 30px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 15px rgba(255, 96, 34, 0.4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 96, 34, 0.5);
+}
+
+.action-btn:active {
+  background: linear-gradient(135deg, #E6511D 0%, #D84315 100%);
+  transform: translateY(1px);
+  box-shadow: 0 4px 10px rgba(255, 96, 34, 0.4);
+}
+
+.usage-tips {
+  width: 100%;
+  margin-top: 20px;
+  padding: 15px;
+  background: rgba(255, 96, 34, 0.1);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 96, 34, 0.3);
+}
+
+.tips-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #FF6022;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.tips-text {
+  font-size: 18px;
+  color: #ccc;
+  line-height: 1.4;
+  margin-bottom: 5px;
+  display: block;
+}
+
 /* 电视端特殊优化 */
 @media screen and (min-width: 1280px) {
   .main-status-text {
@@ -1623,5 +2081,46 @@ export default {
   .center-status {
     padding: 100px;
   }
+}
+
+.error-history {
+  width: 100%;
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 2px solid #333;
+}
+
+.error-list {
+  max-height: 250px; /* 限制错误历史高度 */
+  overflow-y: auto;
+  padding-right: 15px; /* 滚动条宽度 */
+}
+
+.error-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #2a2a2a 0%, #3a3a3a 100%);
+  border-radius: 10px;
+  border: 1px solid #444;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.error-time {
+  font-size: 18px;
+  color: #999;
+  margin-right: 15px;
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.error-text {
+  font-size: 18px;
+  color: #FF9800;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.3;
+  flex: 1;
 }
 </style>

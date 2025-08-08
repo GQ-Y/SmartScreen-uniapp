@@ -19,8 +19,6 @@ const state = {
   isRegistered: false,
   isActive: false,
   
-
-  
   // 连接统计
   reconnectAttempts: 0,
   lastConnectTime: null,
@@ -35,7 +33,10 @@ const state = {
   
   // 错误信息
   lastError: null,
-  errorHistory: []
+  errorHistory: [],
+  
+  // 状态同步定时器
+  statusSyncTimer: null
 }
 
 const getters = {
@@ -212,10 +213,11 @@ const mutations = {
   
   // 设置错误
   SET_ERROR(state, error) {
+    // 直接保存错误对象，不做复杂处理
     state.lastError = error
     if (error) {
       state.errorHistory.unshift({
-        error,
+        error: error,
         timestamp: Date.now(),
         connectionStatus: state.connectionStatus
       })
@@ -267,6 +269,16 @@ const mutations = {
     state.totalConnectTime = 0
     state.errorHistory = []
     state.messageQueue = []
+  },
+  
+  // 设置状态同步定时器
+  SET_STATUS_SYNC_TIMER(state, timer) {
+    state.statusSyncTimer = timer
+  },
+
+  // 清除错误历史
+  CLEAR_ERROR_HISTORY(state) {
+    state.errorHistory = []
   }
 }
 
@@ -299,8 +311,8 @@ const actions = {
 
       manager.addEventListener('onStatusChange', ({ newStatus }) => {
         commit('SET_CONNECTION_STATUS', newStatus)
-        if (newStatus === CONNECTION_STATUS.RECONNECTING) {
-          // 直接访问reconnectAttempts属性，避免调用getStats()
+        // 更新重连次数
+        if (manager.reconnectAttempts !== undefined) {
           commit('SET_RECONNECT_ATTEMPTS', manager.reconnectAttempts)
         }
       })
@@ -310,6 +322,9 @@ const actions = {
         commit('SET_LAST_MESSAGE', message)
         dispatch('handleMessage', message)
       })
+
+      // 启动状态同步定时器
+      dispatch('startStatusSync')
 
       return true
     } catch (error) {
@@ -340,11 +355,14 @@ const actions = {
   },
   
   // 断开WebSocket连接
-  async disconnect({ state, commit }) {
+  async disconnect({ state, commit, dispatch }) {
     try {
       if (state.manager) {
         state.manager.disconnect()
       }
+      
+      // 停止状态同步定时器
+      dispatch('stopStatusSync')
       
       commit('SET_CONNECTION_STATUS', CONNECTION_STATUS.DISCONNECTED)
       commit('SET_REGISTERED', false)
@@ -788,7 +806,11 @@ const actions = {
   // 重置WebSocket
   async reset({ commit, dispatch }) {
     try {
+      logger.info('重置WebSocket状态')
 
+      // 停止状态同步定时器
+      dispatch('stopStatusSync')
+      
       await dispatch('disconnect')
       commit('RESET_STATS')
       commit('CLEAR_ERROR')
@@ -798,6 +820,92 @@ const actions = {
     } catch (error) {
       throw error
     }
+  },
+  
+  // 启动状态同步定时器
+  startStatusSync({ state, commit, dispatch }) {
+    // 清除现有定时器
+    if (state.statusSyncTimer) {
+      clearInterval(state.statusSyncTimer)
+    }
+    
+    // 创建新的定时器，每5秒同步一次状态
+    const timer = setInterval(() => {
+      if (state.manager) {
+        const managerStatus = state.manager.getConnectionStatus()
+        const managerStats = state.manager.getStats()
+        
+        // 同步连接状态
+        if (managerStatus.status !== state.connectionStatus) {
+          commit('SET_CONNECTION_STATUS', managerStatus.status)
+        }
+        
+        // 同步重连次数
+        if (managerStats.reconnectAttempts !== state.reconnectAttempts) {
+          commit('SET_RECONNECT_ATTEMPTS', managerStats.reconnectAttempts)
+        }
+        
+        // 同步注册和激活状态
+        if (managerStatus.isRegistered !== state.isRegistered) {
+          commit('SET_REGISTERED', managerStatus.isRegistered)
+        }
+        
+        if (managerStatus.isActive !== state.isActive) {
+          commit('SET_ACTIVE', managerStatus.isActive)
+        }
+      }
+    }, 5000) // 每5秒同步一次
+    
+    commit('SET_STATUS_SYNC_TIMER', timer)
+    logger.info('WebSocket状态同步定时器已启动')
+  },
+  
+  // 停止状态同步定时器
+  stopStatusSync({ state, commit }) {
+    if (state.statusSyncTimer) {
+      clearInterval(state.statusSyncTimer)
+      commit('SET_STATUS_SYNC_TIMER', null)
+      logger.info('WebSocket状态同步定时器已停止')
+    }
+  },
+  
+  // 刷新WebSocket状态
+  refreshStatus({ state, commit }) {
+    try {
+      if (state.manager) {
+        const managerStatus = state.manager.getConnectionStatus()
+        const managerStats = state.manager.getStats()
+        
+        // 同步连接状态
+        if (managerStatus.status !== state.connectionStatus) {
+          commit('SET_CONNECTION_STATUS', managerStatus.status)
+        }
+        
+        // 同步重连次数
+        if (managerStats.reconnectAttempts !== state.reconnectAttempts) {
+          commit('SET_RECONNECT_ATTEMPTS', managerStats.reconnectAttempts)
+        }
+        
+        // 同步注册和激活状态
+        if (managerStatus.isRegistered !== state.isRegistered) {
+          commit('SET_REGISTERED', managerStatus.isRegistered)
+        }
+        
+        if (managerStatus.isActive !== state.isActive) {
+          commit('SET_ACTIVE', managerStatus.isActive)
+        }
+        
+        logger.debug('WebSocket状态已刷新')
+      }
+    } catch (error) {
+      logger.error('刷新WebSocket状态失败:', error)
+    }
+  },
+  
+  // 清除错误历史
+  clearErrorHistory({ commit }) {
+    commit('CLEAR_ERROR_HISTORY')
+    logger.info('WebSocket错误历史已清除')
   }
 }
 

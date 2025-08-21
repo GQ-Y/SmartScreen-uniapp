@@ -1,3 +1,4 @@
 unpackage/dist/*
 unpackage/cache/*
 unpackage/release/*
+.DS_Store
